@@ -1,7 +1,7 @@
 // Linienaufbau, Auswertung und Klebe-Joker-Hilfen (reine Logik, ohne DOM/THREE).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildLines, coveredRows, evaluate, heldReels, applySticky } from '../../js/core/lines.js';
+import { buildLines, coveredRows, evaluate, heldReels } from '../../js/core/lines.js';
 import { PAY, JOKER, SCATTER, DIAMOND, CLOVER, WHEEL_MIN, ROWS, COLS } from '../../js/core/config.js';
 
 const NONE4 = [false, false, false, false];
@@ -117,12 +117,4 @@ test('heldReels: Walzen mit Klebe-Joker werden gehalten', () => {
   assert.deepEqual(heldReels([1, 7, 13]), [false, true, true, true, false]);
   assert.deepEqual(heldReels([]), [false, false, false, false, false]);
   assert.deepEqual(heldReels([0, 5, 10, 15]), [true, false, false, false, false]);
-});
-
-test('applySticky: Joker landen auf ihren Feldern (und nur dort)', () => {
-  const m = applySticky(fill(0), [0, 7, 19]);
-  assert.equal(m[0][0], JOKER); assert.equal(m[1][2], JOKER); assert.equal(m[3][4], JOKER);
-  assert.equal(m.flat().filter(v => v === JOKER).length, 3);
-  const orig = fill(0);
-  assert.equal(applySticky(orig, [3]), orig, 'verändert und liefert dieselbe Matrix');
 });

@@ -1,5 +1,5 @@
 // @ts-check
-/** Gewinnlinien und Auswertung einer 4×5-Matrix; Klebe-Joker-Hilfen. */
+/** Gewinnlinien und Auswertung einer 4×5-Matrix; gehaltene Walzen (Klebe-Joker). */
 import { BET_STEPS, CLOVER, COLS, DIAMOND, JOKER, PAY, SCATTER } from './config.js';
 import { S } from './state.js';
 
@@ -86,7 +86,8 @@ export function evaluate(m, lines){
   return { wins, jackpot, lineTotal, scatter: { count: scatterCells.length, cells: scatterCells }, clover: { count: cloverCells.length, cells: cloverCells } };
 }
 
-/** Walzen, die wegen Klebe-Jokern gehalten werden. @param {number[]} keys Feldnummern r*COLS+c @returns {boolean[]} */
+/**
+ * Walzen, die wegen Klebe-Jokern gehalten werden (sie drehen nicht, ihr Joker bleibt so sichtbar).
+ * @param {number[]} keys Feldnummern r*COLS+c @returns {boolean[]}
+ */
 export function heldReels(keys){ const h = [false,false,false,false,false]; keys.forEach(k => { h[k % COLS] = true; }); return h; }
-/** Klebe-Joker in die Matrix schreiben (verändert m). @param {number[][]} m @param {number[]} keys @returns {number[][]} */
-export function applySticky(m, keys){ keys.forEach(k => { m[Math.floor(k / COLS)][k % COLS] = JOKER; }); return m; }

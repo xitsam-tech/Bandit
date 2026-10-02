@@ -1,6 +1,10 @@
-/** Walzen: gebogene Kacheln, Shader-Bewegungsunschärfe, Symbol-Slots, sichtbare Matrix, Gewinnrahmen. */
+/**
+ * Walzen: gebogene Kacheln, Shader-Bewegungsunschärfe, Symbol-Slots, sichtbare Matrix, Gewinnrahmen.
+ * Jede Walze trägt dauerhaft ihren Streifen REEL_STRIPS[c]; die `sid` der Kacheln wird nur in buildReels() gesetzt.
+ * Kachel k zeigt Streifenfeld (1 − k) mod N, die Stoppposition einer Walze ist p = (−s) mod N (s = Walzenstellung).
+ */
 import { COLS, ROWS } from '../core/config.js';
-import { sampleSymbol } from '../core/rng.js';
+import { REEL_STRIPS } from '../core/strips.js';
 import { mod } from '../core/util.js';
 import { roundRect } from '../gfx/canvas2d.js';
 import { SYM } from '../gfx/symbols.js';
@@ -53,7 +57,10 @@ export function buildReels(){
       const mesh = new THREE.Mesh(tile, mat);
       mesh.rotation.x = -(k + 0.5) * STEP;
       group.add(mesh);
-      slots.push({ mesh, mat, sid:0 });
+      // Einzige Stelle, an der eine sid gesetzt wird; schreibgeschützt (jeder spätere Schreibversuch wirft im Strict-Mode)
+      const slot = { mesh, mat };
+      Object.defineProperty(slot, 'sid', { value: REEL_STRIPS[c][stripIndexOfSlot(k)], enumerable: true, writable: false, configurable: false });
+      slots.push(slot);
     }
     world.scene.add(group);
     reels.push({ group, slots, blurU, s:0, v:0, phase:'idle', t0:0, s0:0, stopAt:0, tense:false, flash:0, bounce:0 });
@@ -69,15 +76,24 @@ export function applySlot(slot){
   const map = SYM[slot.sid].tex;
   if (slot.mat.map !== map){ const fresh = !slot.mat.map; slot.mat.map = map; slot.mat.emissiveMap = map; if (fresh) slot.mat.needsUpdate = true; }
 }
-export function setSlot(reel, k, sid){ const sl = reel.slots[mod(k, N)]; sl.sid = sid; applySlot(sl); }
+/** Streifenfeld, das Kachel k zeigt (Reihe r liegt auf Kachel s + 1 − r, siehe slotFor). @param {number} k */
+export function stripIndexOfSlot(k){ return mod(1 - k, N); }
+/** Walzenstellung s (ganzzahlig) → Stoppposition. @param {number} s */
+export const stopOf = s => mod(-Math.round(s), N);
+/** Kleinste ganzzahlige Walzenstellung j ≥ from, bei der die Walze auf Stoppposition p steht. */
+export function nextStopAt(from, p){ const j = Math.ceil(from - 1e-9); return j + mod(-p - j, N); }
 export function slotFor(c, r){ const reel = reels[c]; return reel.slots[mod(Math.round(reel.s) + 1 - r, N)]; }
 export function readVisibleMatrix(){
   return Array.from({ length: ROWS }, (_, r) => Array.from({ length: COLS }, (_, c) => slotFor(c, r).sid));
 }
-export function showMatrixOnReels(m){
+/** Aktuelle Stopppositionen aller Walzen (aus der Walzenstellung). */
+export function readStops(){ return reels.map(reel => stopOf(reel.s)); }
+/** Walzen ohne Animation auf Stopppositionen stellen (Start, Neuladen) und Symbol-Texturen binden. Ändert keine sid. */
+export function showStopsOnReels(stops){
   reels.forEach((reel, c) => {
-    reel.slots.forEach(sl => { sl.sid = sampleSymbol(); applySlot(sl); });
-    for (let r = 0; r < ROWS; r++) setSlot(reel, Math.round(reel.s) + 1 - r, m[r][c]);
+    reel.slots.forEach(applySlot);
+    reel.s = mod(-stops[c], N); reel.phase = 'idle'; reel.v = 0; reel.bounce = 0;
+    reel.group.rotation.x = reel.s * STEP;
   });
 }
 export function cellWorld(c, r, lift = 0){

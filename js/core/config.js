@@ -1,5 +1,5 @@
 // @ts-check
-/** Spielregeln und feste Zahlen (Symbole, Gewichte, Auszahlungen, Glücksrad, Jackpot, Einsatzstufen). Keine DOM-/THREE-Abhängigkeit. */
+/** Spielregeln und feste Zahlen (Symbole, Auszahlungen, Glücksrad, Jackpot, Einsatzstufen). Walzenstreifen: strips.js. Keine DOM-/THREE-Abhängigkeit. */
 
 /* =========================================================
    Konfiguration
@@ -22,8 +22,6 @@ export const SYMBOLS = [
   { name:'Klee',     glyph:'🍀' }
 ];
 export const JOKER = 9, SCATTER = 10, DIAMOND = 11;
-// Gewichte pro Walzenfeld (Monte-Carlo-kalibriert: ≈ 92 % aus Linien, Klebe-Joker-Freispielen und Glücksrad, plus 5 % Jackpot-Topf)
-export const WEIGHTS = [16,16,13,13,10,8,6,3,3,4,3,2,5];
 // Gewinn für 3 / 4 / 5 in Folge, als Vielfaches des Einsatzes pro Linie
 export const PAY = [
   [12,30,75],[12,30,75],[15,36,90],[15,36,90],[18,48,120],[24,60,180],[30,80,240],

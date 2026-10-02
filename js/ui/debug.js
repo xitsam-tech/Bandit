@@ -1,20 +1,20 @@
 /** Debug-Dialog und Self-Tests. */
-import { CLOVER, COLS, DIAMOND, FS_AWARD, JOKER, PAY, ROWS, SCATTER, SYMBOLS, WEIGHTS, WHEEL, WHEEL_MIN } from '../core/config.js';
-import { applySticky, buildLines, evaluate, heldReels } from '../core/lines.js';
+import { CLOVER, COLS, DIAMOND, FS_AWARD, JOKER, PAY, ROWS, SCATTER, SYMBOLS, WHEEL, WHEEL_MIN } from '../core/config.js';
+import { buildLines, evaluate, heldReels } from '../core/lines.js';
 import { xpNeed } from '../core/progression.js';
-import { randomMatrix } from '../core/rng.js';
 import { rt } from '../core/runtime.js';
 import { S } from '../core/state.js';
+import { REEL_STRIPS, START_STOPS, checkStrips, matrixFromStops } from '../core/strips.js';
 import { fmt } from '../core/util.js';
 import { wheelIndexAt, wheelTarget } from '../core/wheel-math.js';
 import { $ } from '../dom.js';
 import { N } from '../scene/constants.js';
 import { reels } from '../scene/context.js';
-import { readVisibleMatrix } from '../scene/reels.js';
+import { readStops, readVisibleMatrix, stripIndexOfSlot } from '../scene/reels.js';
 
 export function renderDebug(){
   const grid = $('dbgGrid'); grid.innerHTML = '';
-  const m = rt.glOK ? readVisibleMatrix() : (S.matrix || randomMatrix());
+  const m = rt.glOK ? readVisibleMatrix() : matrixFromStops(S.stops || START_STOPS);
   const winSet = new Set(); (rt.lastResult ? rt.lastResult.wins : []).forEach(w => w.cells.forEach(({ r, c }) => winSet.add(r * COLS + c)));
   m.forEach((row, r) => row.forEach((sid, c) => {
     const d = document.createElement('div'); d.className = 'dbg-cell' + (winSet.has(r * COLS + c) ? ' win' : '');
@@ -36,8 +36,15 @@ export function renderDebug(){
 
 export function runSelfTests(){
   const out = [], ok = (name, cond) => out.push([name, !!cond]);
-  ok('5 Walzen mit je 16 Feldern', reels.length === COLS && reels.every(r => r.slots.length === N));
-  if (rt.glOK && !rt.spinning) ok('3D-Walzen zeigen die gespeicherte Matrix', JSON.stringify(readVisibleMatrix()) === JSON.stringify(S.matrix));
+  const J = JSON.stringify;
+  ok(`5 Walzen mit je ${N} Feldern`, reels.length === COLS && reels.every(r => r.slots.length === N));
+  ok('Jede Walze trägt ihren festen Streifen', reels.every((r, c) => r.slots.every((sl, k) => sl.sid === REEL_STRIPS[c][stripIndexOfSlot(k)])));
+  if (rt.glOK && !rt.spinning){
+    ok('3D-Walzen zeigen die gespeicherte Matrix', J(readVisibleMatrix()) === J(S.matrix));
+    const vis = readVisibleMatrix();
+    ok('Sichtbar = Streifen an den Stopppositionen, Klebe-Joker nur auf Jokern', J(readStops()) === J(S.stops) && J(vis) === J(matrixFromStops(readStops())) &&
+      S.sticky.every(k => vis[Math.floor(k / COLS)][k % COLS] === JOKER));
+  }
   ok('Paar 3–4 erzeugt 4 Linien inkl. Reihe 4', (() => { const L = buildLines([false,false,false,false], [false,false,true]); return L.length === 4 && L.some(l => l.pat.every(v => v === 3)); })());
   ok('Alle Paare = 10 Linien', buildLines([false,false,false,false], [true,true,true]).length === 10);
   ok('Einzelreihe unter Paar wird nicht doppelt gezählt', buildLines([true,false,false,false], [true,false,false]).length === 4);
@@ -65,10 +72,13 @@ export function runSelfTests(){
   })());
   const mcl = fill(1); mcl[0][0] = mcl[1][1] = mcl[2][3] = mcl[3][4] = CLOVER;
   ok('4× Klee irgendwo zählt fürs Glücksrad', evaluate(mcl, row1).clover.count >= WHEEL_MIN);
-  ok('Klebe-Joker landen auf ihren Feldern', (() => { const mm = applySticky(fill(0), [0, 7, 19]); return mm[0][0] === JOKER && mm[1][2] === JOKER && mm[3][4] === JOKER && mm[2][2] === 0; })());
+  ok('Matrix aus Stopppositionen: Reihe r zeigt Streifenfeld p + r', (() => {
+    const st = [0, 5, 15, 7, 12], mm = matrixFromStops(st);
+    return mm.every((row, r) => row.every((v, c) => v === REEL_STRIPS[c][(st[c] + r) % N]));
+  })());
   ok('Walzen mit Klebe-Joker werden gehalten', JSON.stringify(heldReels([1, 7, 13])) === JSON.stringify([false, true, true, true, false]));
   ok('XP-Schwelle steigt pro Level', xpNeed(2) > xpNeed(1) && xpNeed(10) > xpNeed(9));
-  ok('Gewichte decken alle Symbole ab', WEIGHTS.length === SYMBOLS.length && PAY.length === SYMBOLS.length);
+  ok('Streifen: 5 verschiedene Walzen, je N gültige Symbole', checkStrips().length === 0 && PAY.length === SYMBOLS.length);
   const list = $('testList'); list.innerHTML = '';
   out.forEach(([n, pass]) => { const li = document.createElement('li'); li.className = pass ? 'ok' : 'no'; li.textContent = (pass ? '✔ ' : '✖ ') + n; list.appendChild(li); });
   const passed = out.filter(x => x[1]).length;

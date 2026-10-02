@@ -1,12 +1,12 @@
 /** Spielablauf: Drehen, Auswerten, Ablaufkette, Auto-Spiel, Gewinnzähler. */
 import { Music } from '../audio/music.js';
 import { Snd } from '../audio/sound.js';
-import { BET_STEPS, COLS, FS_AWARD, FS_MULT, GAMBLE_CAP, JOKER, JP_FEED, JP_MAX, JP_SEED, ROWS, SCATTER, SYMBOLS, WHEEL_MIN } from '../core/config.js';
-import { activeLines, applySticky, betValue, buildLines, evaluate, heldReels, spinCost } from '../core/lines.js';
+import { BET_STEPS, COLS, FS_AWARD, FS_MULT, GAMBLE_CAP, JOKER, JP_FEED, JP_MAX, JP_SEED, SCATTER, SYMBOLS, WHEEL_MIN } from '../core/config.js';
+import { activeLines, betValue, buildLines, evaluate, heldReels, spinCost } from '../core/lines.js';
 import { xpNeed } from '../core/progression.js';
-import { randomMatrix } from '../core/rng.js';
+import { nextStops } from '../core/rng.js';
 import { rt } from '../core/runtime.js';
-import { S, saveState } from '../core/state.js';
+import { S, saveState, setStops } from '../core/state.js';
 import { fmt } from '../core/util.js';
 import { buzz } from '../dom.js';
 import { closeBanner, showBanner } from './banner.js';
@@ -20,7 +20,7 @@ import { burstCoins, clearTray } from '../scene/coins.js';
 import { world } from '../scene/context.js';
 import { startCoinRun } from '../scene/mechanics.js';
 import { quickStop, startReels } from '../scene/reel-motion.js';
-import { readVisibleMatrix } from '../scene/reels.js';
+import { readStops, readVisibleMatrix } from '../scene/reels.js';
 import { updateSticky } from '../scene/sticky.js';
 import { say } from '../ui/controls.js';
 import { syncUI } from '../ui/sync.js';
@@ -52,19 +52,18 @@ export function spin(){
   clearTray();
   if (!free) startCoinRun();
   const held = free ? heldReels(S.sticky) : [false,false,false,false,false];
-  rt.spinCtx = { free, lines, betIdx: free ? S.fsBetIdx : S.betIdx, held };
+  // Der Zufall wählt nur Stopppositionen; gehaltene Walzen bleiben, wo sie sind (ihr Joker steht dort auf dem Streifen)
+  const cur = readStops(), drawn = nextStops();
+  const stops = drawn.map((p, c) => held[c] ? cur[c] : p);
+  rt.spinCtx = { free, lines, betIdx: free ? S.fsBetIdx : S.betIdx, held, stops };
   rt.hoverBand = null;
   clearPresentation();
   rt.spinning = true; rt.lastWin = 0; LCD.win._anim = (LCD.win._anim || 0) + 1; LCD.win.set(fmt(0));
   if (world.lever && !world.lever.drag && world.lever.angle < 0.3) world.lever.auto = 1;
   Snd.lever(); buzz(12);
-  const prevM = readVisibleMatrix();
-  const m = randomMatrix();
-  for (let c = 0; c < COLS; c++) if (held[c]) for (let r = 0; r < ROWS; r++) m[r][c] = prevM[r][c];
-  if (free) applySticky(m, S.sticky);
-  S.matrix = m;
+  setStops(stops);
   S.pending = rt.spinCtx;
-  startReels(m, held);
+  startReels(stops, held);
   if (held.every(Boolean)) setTimeout(() => { if (rt.spinning) settle(); }, 700);
   Ticker.set(free ? `FREISPIEL · NOCH ${S.freeSpins}` : 'VIEL GLÜCK', free ? '#35e2ff' : '#ffc83a', 99999);
   say(free ? `Freispiel läuft, danach noch ${S.freeSpins}.${held.some(Boolean) ? ' Gehalten: Walze ' + held.map((h, c) => h ? c + 1 : 0).filter(Boolean).join(', ') + '.' : ''}` : `Einsatz ${fmt(cost)} gesetzt.`);
@@ -85,7 +84,7 @@ export async function settle(){
 }
 async function settleInner(){
   const m = readVisibleMatrix();
-  S.matrix = m;
+  setStops(readStops());
   const ctx = rt.spinCtx || { free:false, lines:buildLines(), betIdx:S.betIdx };
   S.pending = null;
   const free = ctx.free, lines = ctx.lines, bet = BET_STEPS[ctx.betIdx], cost = bet * lines.length;
