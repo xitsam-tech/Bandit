@@ -5,6 +5,7 @@
    Konfiguration
    ========================================================= */
 export const ROWS = 4, COLS = 5;
+/** @type {{ name: string, glyph: string, kind?: string, tag?: string }[]} */
 export const SYMBOLS = [
   { name:'Kirsche',  glyph:'🍒' },
   { name:'Zitrone',  glyph:'🍋' },
@@ -28,6 +29,7 @@ export const PAY = [
   [12,30,75],[12,30,75],[15,36,90],[15,36,90],[18,48,120],[24,60,180],[30,80,240],
   [60,180,720],[70,210,900],[100,300,1200],[0,0,0],[120,360,0],[36,100,300]
 ];
+/** Freispiele für n Bonus-Symbole. @type {(n: number) => number} */
 export const FS_AWARD = n => n >= 5 ? 8 : n === 4 ? 5 : n === 3 ? 3 : 0;
 export const FS_MULT = 1;
 export const CLOVER = 12, WHEEL_MIN = 4;

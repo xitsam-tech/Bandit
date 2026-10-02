@@ -25,8 +25,8 @@ function deckAction(id){
 /* =========================================================
    Eingabe: Lampen & Hebel in 3D
    ========================================================= */
-const raycaster = window.THREE ? new THREE.Raycaster() : null;
-const ndc = window.THREE ? new THREE.Vector2() : null;
+export const raycaster = window.THREE ? new THREE.Raycaster() : null;
+export const ndc = window.THREE ? new THREE.Vector2() : null;
 let pointerDown = null;
 function pick(ev){
   const rect = stage.getBoundingClientRect();

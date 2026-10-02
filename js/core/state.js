@@ -3,9 +3,43 @@
 import { BET_STEPS, COLS, JP_MAX, JP_SEED, ROWS, START_CREDITS, STORE_KEY, SYMBOLS } from './config.js';
 import { clamp } from './util.js';
 
+/**
+ * @typedef {import('./lines.js').Line} Line
+ * @typedef {{ free: boolean, lines: Line[], betIdx: number, held?: boolean[] }} SpinCtx
+ * @typedef {{ w: number, k: string }} HistoryEntry
+ * @typedef {{ spins: number, wagered: number, won: number, biggest: number, fsTriggers: number, jackpots: number, wheels: number, gambleNet: number }} Stats
+ * @typedef {object} State
+ * @property {number} credits
+ * @property {number} betIdx
+ * @property {boolean[]} singles
+ * @property {boolean[]} pairs
+ * @property {number} jackpot
+ * @property {boolean} sound
+ * @property {boolean} showLines
+ * @property {number} freeSpins
+ * @property {number} fsBetIdx
+ * @property {Line[] | null} fsLines
+ * @property {number} fsWon
+ * @property {Stats} stats
+ * @property {number[][] | null} matrix
+ * @property {number[]} sticky
+ * @property {number} level
+ * @property {number} xp
+ * @property {boolean} music
+ * @property {boolean} turbo
+ * @property {HistoryEntry[]} history
+ * @property {SpinCtx | null} pending
+ * @property {string} cabinet
+ * @property {number} brightness
+ * @property {number} gambleRefund
+ * @property {{ stake: number } | null} wheelPending
+ * @property {string} view
+ */
+
 /* =========================================================
    Zustand & Speicher
    ========================================================= */
+/** Spielzustand; wird nach jeder Änderung gespeichert. @type {State} */
 export const S = {
   credits: START_CREDITS,
   betIdx: 2,
@@ -20,7 +54,12 @@ export const S = {
   sticky: [], level: 1, xp: 0, music: false, turbo: false, history: [], pending: null, cabinet: 'neon', brightness: 0.85, gambleRefund: 0, wheelPending: null, view: '3d'
 };
 
+/**
+ * Zustand aus Hot-Reload-Daten oder localStorage übernehmen (nur gültige Werte).
+ * @param {{ state?: any }} [extra]
+ */
 export function loadState(extra){
+  /** @type {any} */
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch(e){}
   const src = (extra && extra.state) || saved;
@@ -32,6 +71,7 @@ export function loadState(extra){
   if (Number.isFinite(src.jackpot)) S.jackpot = clamp(src.jackpot, JP_SEED, JP_MAX);
   if (typeof src.sound === 'boolean') S.sound = src.sound;
   if (typeof src.showLines === 'boolean') S.showLines = src.showLines;
+  /** @type {(a: any[]) => number[]} */
   const validKeys = a => a.filter(k => Number.isInteger(k) && k >= 0 && k < ROWS * COLS);
   const hasFsLines = Array.isArray(src.fsLines) && src.fsLines.length > 0;
   const restoreFs = () => { S.fsLines = src.fsLines; S.fsBetIdx = clamp(src.fsBetIdx|0, 0, BET_STEPS.length - 1); S.fsWon = +src.fsWon || 0; };
@@ -49,6 +89,7 @@ export function loadState(extra){
   if (Number.isFinite(src.gambleRefund) && src.gambleRefund > 0) S.gambleRefund = src.gambleRefund;
   if (src.wheelPending && Number.isFinite(src.wheelPending.stake) && src.wheelPending.stake > 0) S.wheelPending = { stake: src.wheelPending.stake };
   if (Array.isArray(src.history)) S.history = src.history.slice(0, 14);
+  /** @type {(m: any) => boolean} */
   const validM = m => Array.isArray(m) && m.length === ROWS &&
     m.every(r => Array.isArray(r) && r.length === COLS && r.every(v => Number.isInteger(v) && v >= 0 && v < SYMBOLS.length));
   if (validM(src.matrix)) S.matrix = src.matrix;
@@ -60,6 +101,7 @@ export function loadState(extra){
     if (p.free && hasFsLines) restoreFs();
   }
 }
+/** Speicherbares Abbild des Zustands. */
 export function snapshot(){
   return {
     credits:S.credits, betIdx:S.betIdx, singles:S.singles, pairs:S.pairs, jackpot:S.jackpot,
@@ -69,4 +111,5 @@ export function snapshot(){
     brightness:S.brightness, gambleRefund:S.gambleRefund, wheelPending:S.wheelPending
   };
 }
+/** Zustand in localStorage sichern (Fehler werden ignoriert). */
 export function saveState(){ try { localStorage.setItem(STORE_KEY, JSON.stringify(snapshot())); } catch(e){} }

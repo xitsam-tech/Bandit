@@ -1,4 +1,8 @@
-/** Walzen-Animation: Anlauf, Lauf, Abbremsen mit Nachfedern, Lande-Effekte, Spannung. */
+/**
+ * Walzen-Animation: Anlauf, Lauf, Abbremsen mit Nachfedern, Lande-Effekte, Spannung.
+ * Nach dem Stopp der letzten Walze wird game/flow.settle() aufgerufen – ein bewusster Funktions-Zyklus
+ * mit game/flow.js (beim Laden der Module wird davon nichts benutzt).
+ */
 import { Snd } from '../audio/sound.js';
 import { CLOVER, COLS, DIAMOND, ROWS, SCATTER } from '../core/config.js';
 import { sampleSymbol } from '../core/rng.js';

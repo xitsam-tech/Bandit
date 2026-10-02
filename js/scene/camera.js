@@ -12,7 +12,7 @@ export const orbit = { yaw:0.36, pitch:0.1, zoom:1, drag:null, pinch:null, point
 export function resetView(){ const v = VIEW_PRESETS[S.view] || VIEW_PRESETS['3d']; orbit.yaw = v.yaw; orbit.pitch = v.pitch; orbit.zoom = 1; orbit.lastInput = now(); }
 
 /* =========================================================
-   Größe & Render-Schleife
+   Zeiger-Parallaxe & Größe
    ========================================================= */
 export const pointer = { x:0, y:0, tx:0, ty:0 };
 export function resize(){

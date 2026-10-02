@@ -1,4 +1,8 @@
-/** Risiko-Leiter: Rot/Schwarz, Buchung, Anzeige. */
+/**
+ * Risiko-Leiter: Rot/Schwarz, Buchung, Anzeige.
+ * gambleCollect() stößt über game/flow.scheduleNext() den Auto-Weiterlauf an – ein bewusster Funktions-Zyklus
+ * mit game/flow.js (beim Laden der Module wird davon nichts benutzt).
+ */
 import { Snd } from '../audio/sound.js';
 import { GAMBLE_CAP, GAMBLE_MAX_STEPS } from '../core/config.js';
 import { rand } from '../core/rng.js';
