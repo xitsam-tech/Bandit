@@ -4,7 +4,7 @@ import { clamp, now } from '../core/util.js';
 import { REDUCED } from '../dom.js';
 import { world } from './context.js';
 import { TRAY } from './lower-cabinet.js';
-import { updateCoinRun } from './mechanics.js';
+import { updateCoinRun } from './coin-chute.js';
 
 export function buildCoins(){
   const n = REDUCED ? 30 : 140;

@@ -2,9 +2,11 @@
 import { world } from './context.js';
 import { rrShape } from './helpers.js';
 
+/** Lage der Birnen (für Fassungen und Ringleitung im Innenleben). */
+export const bulbRing = { pts:[], z:0.4 };
 export function buildBulbs(){
   const pts = rrShape(6.42, 4.12, 0.42).getSpacedPoints(48);
-  pts.pop();
+  pts.pop(); bulbRing.pts = pts.map(p => ({ x:p.x, y:p.y }));
   const n = pts.length, d = new THREE.Object3D();
   // Chrom-Fassung
   const sockets = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.068, 0.08, 0.05, 20),

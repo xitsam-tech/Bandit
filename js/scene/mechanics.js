@@ -1,168 +1,196 @@
-/** Innenleben (nur im Glas-Gehäuse sichtbar) und Münzlauf durch den Münzprüfer. */
+/**
+ * Innenleben (nur im Glas-Gehäuse sichtbar), nach Vorbild echter Schrittmotor-Walzengeräte:
+ * Walzenrahmen mit Seitenplatten und Traversen, je Walze Halteblech, Schrittmotor, Speichenrad mit Indexfahne,
+ * Gabellichtschranke, LED-Leuchtplatine und Walzenplatine; Hebelmechanik mit eingehängter Rückholfeder.
+ * Bauteile außerhalb des Walzenrahmens: interior.js, Kabel: harness.js, Münzweg: coin-chute.js.
+ */
 import { COLS } from '../core/config.js';
-import { S } from '../core/state.js';
 import { now } from '../core/util.js';
 import { CELL_W, R, reelX } from './constants.js';
 import { reels, world } from './context.js';
-import { canvasTex } from './helpers.js';
+import { checkWiring, flushCables, registerPort, registerSolid, requirePorts, wiring } from './cables.js';
+import { Batch, V, alignY, mergeGeometries } from './geo.js';
+import { buildInterior, placeBoard } from './interior.js';
+import { buildHarness } from './harness.js';
+import { ledBoard, reelBoard } from './boards.js';
+export { startCoinRun, updateCoinRun } from './coin-chute.js';
 
-/* ----- Innenleben (nur im Glas-Gehäuse sichtbar), nach Vorbild echter Schrittmotor-Walzengeräte ----- */
-export const mech = { parts:[], backPlate:null, flags:[], cam:null, spring:null, agitator:null, light:null };
-export function buildMechanics(){
-  const add = (o, parent = world.scene) => { o.visible = false; parent.add(o); mech.parts.push(o); return o; };
-  const M = {
+export const mech = { parts:[], backPlate:null, flags:[], cam:null, spring:null, agitator:null, light:null, flap:null, wiring, checkWiring, pcbs:[] };
+
+/** Gemeinsame Materialien des Innenlebens. */
+function materials(){
+  return {
     steel:  new THREE.MeshStandardMaterial({ color:0xa9aeb6, metalness:0.85, roughness:0.42, envMapIntensity:0.9 }),
+    zinc:   new THREE.MeshStandardMaterial({ color:0xc3c8cf, metalness:0.8, roughness:0.5, envMapIntensity:0.9 }),
     alu:    new THREE.MeshStandardMaterial({ color:0xd6d9de, metalness:0.9, roughness:0.28, envMapIntensity:1.0 }),
     black:  new THREE.MeshStandardMaterial({ color:0x17171b, metalness:0.35, roughness:0.55 }),
     brass:  new THREE.MeshStandardMaterial({ color:0xc9a04a, metalness:1, roughness:0.32 }),
-    copper: new THREE.MeshStandardMaterial({ color:0xc06a34, metalness:1, roughness:0.35 }),
     white:  new THREE.MeshStandardMaterial({ color:0xeceae4, roughness:0.6 }),
-    blue:   new THREE.MeshStandardMaterial({ color:0x2a4fa8, roughness:0.45, metalness:0.1 }),
-    cap:    new THREE.MeshStandardMaterial({ color:0x1d2f6e, roughness:0.4, metalness:0.2 }),
-    led:    new THREE.MeshBasicMaterial({ color:0xfff6e0, toneMapped:false })
+    spring: new THREE.MeshStandardMaterial({ color:0xb8bcc4, metalness:0.95, roughness:0.25 }),
+    label:  new THREE.MeshStandardMaterial({ color:0xe8e2c8, roughness:0.7 })
   };
-  const box = (w, h, d, mat, x, y, z, parent) => { const m = add(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat), parent); m.position.set(x, y, z); return m; };
-  const cyl = (r, h, mat, x, y, z, axis = 'y', parent) => {
-    const m = add(new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 20), mat), parent);
-    if (axis === 'x') m.rotation.z = Math.PI / 2; else if (axis === 'z') m.rotation.x = Math.PI / 2;
-    m.position.set(x, y, z); return m;
-  };
-  const tube = (pts, r, mat, closed = false) => add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, closed), Math.max(20, pts.length * 12), r, 6, closed), mat));
-  const V = (x, y, z) => new THREE.Vector3(x, y, z);
-  const zc = -R, xL = reelX(0) - CELL_W / 2 - 0.14, xR = reelX(COLS - 1) + CELL_W / 2 + 0.14;
+}
 
-  // Walzenrahmen: Blech-Seitenwände mit Erleichterungslöchern, Querstreben, Rückwandblech
-  const plate = new THREE.Shape(); plate.moveTo(-2.3, -2.35); plate.lineTo(2.3, -2.35); plate.lineTo(2.3, 2.35); plate.lineTo(-2.3, 2.35); plate.closePath();
-  [[-1.2, 1.2], [1.2, 1.2], [-1.2, -1.2], [1.2, -1.2]].forEach(([a, b]) => { const h = new THREE.Path(); h.absarc(a, b, 0.45, 0, Math.PI * 2, true); plate.holes.push(h); });
+export function buildMechanics(){
+  const add = (o, parent = world.scene) => { o.visible = false; parent.add(o); mech.parts.push(o); return o; };
+  const M = materials(), b = new Batch(), zc = -R;
+  const XP = reelX(COLS - 1) + CELL_W / 2 + 0.14;   // Seitenplatten bei ±2.89
+
+  /* ----- Walzenrahmen: Seitenplatten mit Erleichterungslöchern, Traversen, Distanzstücke zu den Gehäusewänden ----- */
+  const plate = new THREE.Shape(); plate.moveTo(-2.02, -2.4); plate.lineTo(2.02, -2.4); plate.lineTo(2.02, 2.4); plate.lineTo(-2.02, 2.4); plate.closePath();
+  [[-1.1, 1.25], [1.1, 1.25], [-1.1, -1.25], [1.1, -1.25]].forEach(([a, c]) => { const h = new THREE.Path(); h.absarc(a, c, 0.5, 0, Math.PI * 2, true); plate.holes.push(h); });
   const plateGeo = new THREE.ExtrudeGeometry(plate, { depth:0.04, bevelEnabled:false, curveSegments:24 });
-  [xL, xR].forEach(x => { const m = add(new THREE.Mesh(plateGeo, M.steel)); m.rotation.y = Math.PI / 2; m.position.set(x - 0.02, 0, zc); });
-  [[2.3, zc - 2.25], [-2.3, zc - 2.25], [2.3, zc + 1.9], [-2.3, zc + 1.9]].forEach(([y, z]) => cyl(0.045, xR - xL, M.alu, (xL + xR) / 2, y, z, 'x'));
+  [-XP, XP].forEach(x => {
+    b.add(plateGeo, M.zinc, new THREE.Matrix4().makeTranslation(x - 0.02, 0, zc).multiply(new THREE.Matrix4().makeRotationY(Math.PI / 2)));
+    registerSolid('Seitenplatte', new THREE.Box3(V(x - 0.02, -2.4, zc - 2.02), V(x + 0.02, 2.4, zc + 2.02)));
+    // Distanzstücke zur Gehäusewand (Vierkant) mit Wandwinkel
+    [[2.0, -4.06], [-2.0, -4.06], [2.0, -1.0], [-2.0, -1.0]].forEach(([y, z]) => {
+      const s = Math.sign(x), len = 3.95 - Math.abs(x) - 0.02;
+      b.box(len, 0.07, 0.07, M.steel, [x + s * (0.02 + len / 2), y, z]);
+      b.box(0.012, 0.18, 0.18, M.steel, [s * 3.95 - s * 0.006, y, z]);
+      registerSolid('Distanzstück', new THREE.Box3(V(Math.min(x, s * 3.95), y - 0.04, z - 0.04), V(Math.max(x, s * 3.95), y + 0.04, z + 0.04)));
+    });
+  });
+  // Traversen: oben (tragen die Hauptplatine), unten (tragen die Walzenhalter), vorne
+  const rail = (x0, x1, y, z, s = 0.08) => {
+    b.box(x1 - x0, s, s, M.steel, [(x0 + x1) / 2, y, z]);
+    registerSolid('Traverse', new THREE.Box3(V(x0, y - s / 2, z - s / 2), V(x1, y + s / 2, z + s / 2)));
+  };
+  rail(-3.2, 3.2, 2.46, -2.6); rail(-3.2, 3.2, 2.46, -4.0);
+  rail(-XP, XP, -2.46, zc); rail(-XP, XP, -2.46, -3.9); rail(-XP, XP, 2.3, -0.3, 0.06); rail(-XP, XP, -2.3, -0.3, 0.06);
 
+  /* ----- je Walze: Halteblech im Spalt, Motor, Speichenrad (dreht mit), Lichtschranke, LED-Platine, Walzenplatine ----- */
+  const rp = reelBoard(), rowsY = [1.0, 0.36, -0.36, -1.0], lb = ledBoard(rowsY.map(y => -y));
+  mech.pcbs.push({ name:'Walzenplatine', stats:rp.stats }, { name:'LED-Platine', stats:lb.stats });
   reels.forEach((reel, c) => {
-    const x = reelX(c), side = x + CELL_W / 2 + 0.07;
-    // mitdrehend: Speichenrad beidseitig, Nabe, Indexfahne für die Lichtschranke
-    for (const s of [-1, 1]) for (let k = 0; k < 6; k++){
-      const sp = add(new THREE.Mesh(new THREE.BoxGeometry(0.03, (R - 0.12) * 2, 0.07), M.white), reel.group);
-      sp.position.x = s * (CELL_W / 2 - 0.05); sp.rotation.x = k * Math.PI / 6;
+    const X = reelX(c), gx = X + 0.565;
+    // Speichenrad auf der Motorseite (schalenförmig: Nabe innen, Felgenring am Band), Indexfahne am Ring
+    const wheel = [], dark = [];
+    wheel.push({ geo:new THREE.CylinderGeometry(0.27, 0.27, 0.08, 28), matrix:new THREE.Matrix4().makeTranslation(0.15, 0, 0).multiply(new THREE.Matrix4().makeRotationZ(Math.PI / 2)) });
+    const ring = new THREE.RingGeometry(1.94, 2.04, 64); ring.rotateY(Math.PI / 2); ring.translate(0.44, 0, 0); wheel.push({ geo:ring });
+    const ring2 = new THREE.RingGeometry(1.94, 2.04, 64); ring2.rotateY(-Math.PI / 2); ring2.translate(0.44, 0, 0); wheel.push({ geo:ring2 });
+    for (let k = 0; k < 6; k++){
+      const a = k / 6 * Math.PI * 2 + 0.26, p0 = V(0.17, Math.cos(a) * 0.26, Math.sin(a) * 0.26), p1 = V(0.44, Math.cos(a) * 1.95, Math.sin(a) * 1.95);
+      const d = p1.clone().sub(p0);
+      wheel.push({ geo:new THREE.BoxGeometry(0.03, d.length(), 0.08), matrix:alignY(p0.clone().add(p1).multiplyScalar(0.5), d) });
     }
-    const hub = add(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, CELL_W - 0.06, 24), M.alu), reel.group); hub.rotation.z = Math.PI / 2;
-    const flag = add(new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.22, 0.12), M.black), reel.group);
-    flag.position.set(CELL_W / 2 - 0.01, R - 0.05, 0); mech.flags.push(flag);
-    // fest: Direktantrieb-Schrittmotor (in der Trommel), Halteblech im Spalt, Lichtschranke, LED-Leuchtplatine
-    box(0.36, 0.42, 0.42, M.black, x + 0.18, 0, zc);
-    box(0.02, 0.38, 0.38, M.alu, x + 0.37, 0, zc);
-    const lbl = box(0.005, 0.18, 0.28, M.white, x + 0.381, 0.05, zc);
-    cyl(0.03, 0.2, M.alu, x + 0.47, 0, zc, 'x');
-    const bracket = box(0.03, 0.42, 2.3, M.steel, side, 0, zc - 1.15);
-    box(0.03, 0.42, 0.2, M.steel, side, 0, zc - 2.28);
-    const opto = box(0.08, 0.12, 0.16, M.black, side - 0.04, -0.6, zc - 2.0);
-    // Leuchtplatine hinter den sichtbaren Reihen (beleuchtet die Walzenbänder von innen)
-    box(CELL_W - 0.2, 2.6, 0.02, M.cap, x, 0, zc + 1.62);
-    for (let k = 0; k < 4; k++) box(0.5, 0.06, 0.03, M.led, x, (1.5 - k) * 0.62, zc + 1.64);
-    // Kabelbaum vom Motor zur Hauptplatine
-    tube([V(x + 0.3, -0.2, zc - 0.25), V(side - 0.05, -0.5, zc - 1.2), V(side - 0.05, 1.6, zc - 2.2), V(x * 0.7, 2.62, zc - 1.6)], 0.035, [M.black, M.blue, M.copper, M.white, M.black][c]);
+    dark.push({ geo:new THREE.BoxGeometry(0.06, 0.07, 0.1), matrix:new THREE.Matrix4().makeTranslation(0.48, 1.915, 0) });   // Indexfahne
+    dark.push({ geo:new THREE.CylinderGeometry(0.04, 0.04, 0.1, 12), matrix:new THREE.Matrix4().makeTranslation(0.16, 0, 0).multiply(new THREE.Matrix4().makeRotationZ(Math.PI / 2)) });
+    add(new THREE.Mesh(mergeGeometries(wheel), M.white), reel.group);
+    mech.flags.push(add(new THREE.Mesh(mergeGeometries(dark), M.black), reel.group));
+    // Halteblech im Spalt (unten an der Traverse, oben unter der Walzenplatine)
+    b.box(0.025, 4.72, 0.3, M.zinc, [gx, -0.08, zc]);
+    b.box(0.025, 0.06, 0.4, M.zinc, [gx, 2.25, zc - 0.33]);   // Lasche zur oberen Traverse
+    b.box(0.025, 0.2, 0.06, M.zinc, [gx, 2.36, -2.53]);
+    registerSolid('Walzenhalter', new THREE.Box3(V(gx - 0.0125, -2.44, zc - 0.15), V(gx + 0.0125, 2.28, zc + 0.15)));
+    // Schrittmotor: Topf, Flansch am Halteblech, Typenschild; Welle trägt das Rad
+    b.cyl(0.2, 0.32, M.black, [X + 0.36, 0, zc], [0, 0, Math.PI / 2], null, 28);
+    b.box(0.02, 0.46, 0.46, M.steel, [X + 0.54, 0, zc]);
+    b.box(0.2, 0.005, 0.18, M.label, [X + 0.36, 0.2, zc]);
+    [[0.18, 0.18], [-0.18, 0.18], [0.18, -0.18], [-0.18, -0.18]].forEach(([y, z]) => b.cyl(0.025, 0.02, M.steel, [X + 0.535, y, zc + z], [0, 0, Math.PI / 2], null, 10));
+    registerPort('reel' + c + '.motor', { pos:V(X + 0.54, 0.255, zc - 0.06), dir:V(0, 1, 0), part:'Motor ' + (c + 1) });
+    b.box(0.02, 0.03, 0.07, M.white, [X + 0.54, 0.24, zc - 0.06]);
+    // Gabellichtschranke am Halteblech: Fahne läuft zwischen den Schenkeln (innerhalb des Bandes)
+    b.box(0.03, 0.24, 0.1, M.black, [X + 0.54, 1.91, zc]);
+    b.box(0.07, 0.06, 0.08, M.black, [X + 0.5, 1.83, zc]);
+    b.box(0.07, 0.05, 0.08, M.black, [X + 0.5, 1.995, zc]);
+    registerPort('reel' + c + '.opto', { pos:V(X + 0.54, 2.035, zc + 0.075), dir:V(0, 1, 0), part:'Lichtschranke ' + (c + 1) });
+    b.box(0.02, 0.012, 0.03, M.white, [X + 0.54, 2.03, zc + 0.075]);
+    // LED-Leuchtplatine im Walzeninneren an einem Arm vom linken Halteblech (offene Walzenseite)
+    const ax = X - 0.55;
+    b.box(0.34, 0.03, 0.06, M.zinc, [ax + 0.17, 0, zc]).box(0.04, 0.03, 1.3, M.zinc, [X - 0.2, 0, zc + 0.64]);
+    b.box(0.03, 0.05, 0.06, M.white, [X - 0.54, 0.03, zc]);
+    const led = lb.group.clone(); led.rotation.x = Math.PI / 2; led.position.set(X, 0, zc + 1.3); add(led);
+    registerSolid('LED-Platine', new THREE.Box3(V(X - 0.32, -1.25, zc + 1.27), V(X + 0.32, 1.25, zc + 1.33)));
+    registerPort('reel' + c + '.led', { pos:V(X - 0.54, 0.055, zc), dir:V(0, 1, 0), part:'LED-Platine ' + (c + 1) });
+    // Walzenplatine über dem Band, auf den Halteblechen
+    placeBoard(add, rp, V(X, 2.3, zc), V(1, 0, 0), V(0, 1, 0), 'rp' + c + '.', true);
+    registerSolid('Walzenplatine', new THREE.Box3(V(X - 0.56, 2.285, zc - 0.12), V(X + 0.56, 2.42, zc + 0.12)));
+    requirePorts('reel' + c + '.motor', 'reel' + c + '.opto', 'reel' + c + '.led');
   });
-  // Hauptplatine als Einschub über den Walzen: Kondensatoren, Chips, Kühlkörper, Stecker
-  const pc = document.createElement('canvas'); pc.width = 512; pc.height = 256; const px = pc.getContext('2d');
-  px.fillStyle = '#0b4f2c'; px.fillRect(0, 0, 512, 256);
-  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  px.strokeStyle = '#c9a54a'; px.lineWidth = 2;
-  for (let i = 0; i < 90; i++){ const x0 = rnd() * 512, y0 = rnd() * 256; px.beginPath(); px.moveTo(x0, y0); px.lineTo(x0 + (rnd() - 0.5) * 160, y0); px.lineTo(x0 + (rnd() - 0.5) * 160, y0 + (rnd() - 0.5) * 90); px.stroke(); }
-  px.fillStyle = '#e8e2d0'; px.font = 'bold 14px monospace'; px.fillText('MPU-5  REV C', 16, 240);
-  const board = add(new THREE.Mesh(new THREE.PlaneGeometry(6.4, 2.8), new THREE.MeshStandardMaterial({ map:canvasTex(pc), roughness:0.6 })));
-  board.rotation.x = -Math.PI / 2; board.position.set(0, 2.62, -2.65);
-  for (const [x, z] of [[xL, -1.4], [xR, -1.4], [xL, -3.9], [xR, -3.9]]) cyl(0.04, 0.27, M.alu, x, 2.485, z);   // Abstandsbolzen auf dem Walzenrahmen
-  for (let i = 0; i < 9; i++) cyl(0.07 + (i % 3) * 0.03, 0.22 + (i % 2) * 0.1, M.cap, -2.4 + i * 0.32, 2.75, -3.6);
-  [[-1.2, -2.2, 0.7, 0.5], [0.4, -2.6, 0.9, 0.6], [1.9, -2.0, 0.5, 0.5], [-2.4, -2.9, 0.4, 0.4]].forEach(([x, z, w, d]) => box(w, 0.06, d, M.black, x, 2.66, z));
-  for (let i = 0; i < 8; i++) box(0.05, 0.3, 0.7, M.alu, 2.4 + i * 0.09, 2.8, -3.3);   // Kühlkörper-Rippen
-  for (let i = 0; i < 5; i++) box(0.38, 0.12, 0.16, M.white, -2.4 + i * 1.2, 2.69, -1.35);   // Stecker zu den Motoren
-  box(5.6, 0.04, 0.5, new THREE.MeshStandardMaterial({ color:0x0b4f2c, roughness:0.6 }), 0, 2.6, 0.05);   // Platine hinter der Laufschrift
-  box(5.6, 0.04, 0.45, new THREE.MeshStandardMaterial({ color:0x0b4f2c, roughness:0.6 }), 0, -2.56, 0.02); // Platine hinter den Anzeigen
+  // Halteblech links neben Walze 1 (trägt deren LED-Arm) – an der linken Seitenplatte
+  b.box(0.3, 0.12, 0.3, M.zinc, [-XP + 0.17, 0, zc]);
 
-  // Hebelmechanik: Lagerbuchse, Nockenscheibe (dreht mit), Rückholfeder (dehnt sich), Mikroschalter
-  cyl(0.12, 0.35, M.brass, 3.92, 0, zc, 'x');
-  // Nockenscheibe als Gruppe: dreht um die x-Achse mit dem Hebel; Mitnehmer sitzt am Scheibenrand (lokale Koordinaten)
+  /* ----- Hebelmechanik: Montageplatte an der rechten Wand, Lagerbuchse, Achse, Nockenscheibe, Feder, Mikroschalter ----- */
+  // Lagerplatte (Buchse + Schalterwinkel) und eigener Wandwinkel für den Federanker
+  b.box(0.03, 1.3, 0.8, M.steel, [3.9, 0.12, zc + 0.26]);
+  [[0.66, -0.07], [0.66, 0.6], [-0.44, -0.07], [-0.44, 0.6]].forEach(([y, z]) => b.cyl(0.03, 0.02, M.steel, [3.875, y, zc + z], [0, 0, Math.PI / 2], null, 10));
+  registerSolid('Hebelplatte', new THREE.Box3(V(3.88, -0.53, zc - 0.14), V(3.92, 0.77, zc + 0.66)));
+  b.box(0.03, 0.42, 0.3, M.steel, [3.9, -1.62, zc - 0.26]);
+  [-0.1, 0.1].forEach(z => b.cyl(0.03, 0.02, M.steel, [3.875, -1.48, zc - 0.26 + z], [0, 0, Math.PI / 2], null, 10));
+  b.cyl(0.12, 0.35, M.brass, [3.92, 0, zc], [0, 0, Math.PI / 2]);
+  b.cyl(0.04, 0.3, M.steel, [3.72, 0, zc], [0, 0, Math.PI / 2]);
   mech.cam = add(new THREE.Group()); mech.cam.position.set(3.65, 0, zc);
-  const camDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.08, 24), M.steel); camDisc.rotation.z = Math.PI / 2; mech.cam.add(camDisc);
+  const camDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.08, 32), M.steel); camDisc.rotation.z = Math.PI / 2; mech.cam.add(camDisc);
   const camLug = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.2), M.steel); camLug.position.set(0, 0.36, 0); mech.cam.add(camLug);
-  const helix = []; for (let i = 0; i <= 120; i++){ const a = i / 120 * Math.PI * 2 * 12; helix.push(V(Math.cos(a) * 0.08, -i / 120 * 1.3, Math.sin(a) * 0.08)); }
-  const springGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(helix), 360, 0.014, 5, false);
-  const springPivot = add(new THREE.Group()); springPivot.position.set(3.65, -1.85, zc + 0.25);
-  const springMesh = new THREE.Mesh(springGeo, M.steel); springMesh.position.y = 1.3; springPivot.add(springMesh); mech.spring = springPivot;
-  box(0.2, 0.08, 0.2, M.steel, 3.65, -1.88, zc + 0.25);
-  box(0.16, 0.2, 0.3, M.black, 3.65, -0.5, zc - 0.45);
-  box(0.02, 0.18, 0.06, M.alu, 3.65, -0.38, zc - 0.32);
+  const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.12, 12), M.steel); pin.rotation.z = Math.PI / 2; pin.position.set(-0.07, 0, -0.26); mech.cam.add(pin);
+  const pinHead = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.015, 12), M.steel); pinHead.rotation.z = Math.PI / 2; pinHead.position.set(-0.13, 0, -0.26); mech.cam.add(pinHead);
+  // Federanker: Winkel an der Montageplatte mit Stift
+  const ANCHOR = V(3.58, -1.62, zc - 0.26);
+  b.box(0.32, 0.03, 0.14, M.steel, [3.73, ANCHOR.y - 0.07, ANCHOR.z]);
+  b.box(0.03, 0.2, 0.14, M.steel, [3.875, ANCHOR.y - 0.0, ANCHOR.z]);
+  b.box(0.03, 0.1, 0.08, M.steel, [3.61, ANCHOR.y - 0.03, ANCHOR.z]);
+  b.cyl(0.022, 0.12, M.steel, [ANCHOR.x, ANCHOR.y, ANCHOR.z], [0, 0, Math.PI / 2], null, 12);
+  b.cyl(0.035, 0.015, M.steel, [ANCHOR.x - 0.065, ANCHOR.y, ANCHOR.z], [0, 0, Math.PI / 2], null, 12);
+  mech.spring = buildSpring(add, M.spring, ANCHOR);
+  // Mikroschalter mit Rollenhebel: wird vom Nocken in der Mitte des Hebelwegs betätigt
+  const sw = V(3.66, 0.34, zc + 0.46);
+  b.box(0.1, 0.14, 0.24, M.black, [sw.x, sw.y, sw.z], [-0.95, 0, 0]);
+  b.box(0.012, 0.012, 0.2, M.steel, [sw.x, sw.y - 0.1, sw.z - 0.08], [-0.95, 0, 0]);
+  b.cyl(0.025, 0.02, M.white, [sw.x, sw.y - 0.12, sw.z - 0.18], [0, 0, Math.PI / 2], null, 12);
+  b.box(0.24, 0.03, 0.12, M.steel, [3.78, sw.y + 0.12, sw.z + 0.06]);
+  registerPort('lever.switch', { pos:V(sw.x, sw.y + 0.17, sw.z + 0.05), dir:V(0, 1, 0), part:'Hebelschalter' });
+  b.box(0.06, 0.04, 0.08, M.white, [sw.x, sw.y + 0.15, sw.z + 0.05]);
+  registerSolid('Hebelschalter', new THREE.Box3(V(sw.x - 0.06, sw.y - 0.12, sw.z - 0.14), V(sw.x + 0.06, sw.y + 0.1, sw.z + 0.14)));
+  requirePorts('lever.switch');
 
-  // Unterbau: Netzteil mit Lüfter, Münzprüfer mit Fallrohr, Münz-Hopper, Lautsprecher
-  const vent = document.createElement('canvas'); vent.width = vent.height = 128; const vx = vent.getContext('2d');
-  vx.fillStyle = '#8f949c'; vx.fillRect(0, 0, 128, 128); vx.fillStyle = '#2a2c30';
-  for (let y = 10; y < 118; y += 12) vx.fillRect(14, y, 100, 5);
-  const psu = add(new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.9, 1.5), [M.steel, M.steel, M.steel, M.steel, new THREE.MeshStandardMaterial({ map:canvasTex(vent), metalness:0.7, roughness:0.45 }), M.steel]));
-  psu.position.set(-2.55, -4.65, -2.4);
-  cyl(0.32, 0.06, M.black, -2.55, -4.65, -1.63, 'z');
-  for (let k = 0; k < 7; k++){ const bl = box(0.04, 0.26, 0.02, M.black, -2.55, -4.65, -1.59); bl.rotation.z = k / 7 * Math.PI * 2; bl.position.x += Math.cos(k / 7 * Math.PI * 2) * 0.12; bl.position.y += Math.sin(k / 7 * Math.PI * 2) * 0.12; }
-  box(0.5, 0.6, 0.45, M.black, 3.3, 2.0, -0.6);
-  box(0.06, 0.18, 0.02, M.alu, 3.3, 2.05, -0.37);
-  tube([V(3.3, 1.7, -0.7), V(3.55, 0.6, -0.9), V(3.6, -2.6, -1.1), V(3.1, -3.7, -1.9), V(2.3, -4.15, -2.3)], 0.07, new THREE.MeshStandardMaterial({ color:0xb8c8d8, metalness:0.2, roughness:0.15, transparent:true, opacity:0.55 }));
-  const hopper = add(new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.7, 0.75, 32, 1, true), new THREE.MeshStandardMaterial({ color:0x2a2c32, metalness:0.5, roughness:0.4, side:THREE.DoubleSide })));
-  hopper.position.set(1.9, -4.55, -2.4); hopper.rotation.x = 0.35;
-  mech.agitator = add(new THREE.Group()); mech.agitator.position.copy(hopper.position); mech.agitator.rotation.x = 0.35;
-  const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.66, 0.66, 0.03, 32), M.steel); disc.position.y = -0.3; mech.agitator.add(disc);
-  for (let i = 0; i < 26; i++){
-    const cn = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.03, 18), M.brass);
-    const a = i * 2.4, rr = 0.12 + (i % 5) * 0.11;
-    cn.position.set(Math.cos(a) * rr, -0.27 + Math.floor(i / 9) * 0.035, Math.sin(a) * rr); cn.rotation.set(0.2 * Math.sin(i), 0, 0.2 * Math.cos(i)); mech.agitator.add(cn);
-  }
-  cyl(0.22, 0.45, M.black, 1.9, -5.0, -2.75, 'z');
-  const spk = add(new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.14, 0.22, 28, 1, true), new THREE.MeshStandardMaterial({ color:0x222226, roughness:0.8, side:THREE.DoubleSide })));
-  spk.rotation.x = -Math.PI / 2; spk.position.set(-0.6, -4.55, -0.25);
-  cyl(0.16, 0.14, M.steel, -0.6, -4.55, -0.45, 'z');
+  // Bauteile außerhalb des Rahmens, dann Kabelbaum
+  buildInterior(add, M, b);
+  b.flush(add);
+  buildHarness();
+  flushCables(add);
   // dezente Innenbeleuchtung, damit die Mechanik im Glas lesbar ist
-  // Ausgaberutsche vom Hopper zur Auswurföffnung
-  tube([V(1.9, -4.8, -1.95), V(1.3, -4.92, -1.0), V(0.4, -5.02, -0.1), V(0, -5.02, 0.34)], 0.1, M.steel);
-  // Füße für Hopper und Netzteil
-  [[1.45, -2.4], [2.35, -2.4]].forEach(([x, z]) => box(0.07, 0.4, 0.07, M.steel, x, -5.02, z));
-  [[-3.3, -3.0], [-1.8, -3.0], [-3.3, -1.8], [-1.8, -1.8]].forEach(([x, z]) => box(0.1, 0.12, 0.1, M.black, x, -5.16, z));
-  // Kabel: Netzteil → Platine, Netzteil → Hopper-Motor, Platine → Lautsprecher / Münzprüfer / Mikroschalter / Anzeigen / Tasten-Deck
-  const wRed = new THREE.MeshStandardMaterial({ color:0xb02020, roughness:0.5 }), wGrey = new THREE.MeshStandardMaterial({ color:0x9a9aa2, roughness:0.5 });
-  tube([V(-2.55, -4.2, -2.7), V(-3.5, -3.6, -2.9), V(-3.6, 1.5, -3.1), V(-3.0, 2.62, -3.1)], 0.05, M.black);
-  tube([V(-1.7, -4.95, -2.6), V(0, -5.12, -2.9), V(1.6, -5.05, -2.85)], 0.035, wRed);
-  tube([V(-2.0, 2.62, -1.5), V(-3.45, 1.2, -0.9), V(-3.2, -3.9, -0.6), V(-0.8, -4.55, -0.5)], 0.03, M.blue);
-  tube([V(2.4, 2.66, -1.4), V(3.0, 2.45, -1.05), V(3.3, 2.05, -0.84)], 0.03, wRed);
-  tube([V(2.9, 2.6, -3.4), V(3.45, 1.5, -3.0), V(3.6, -0.45, -2.6)], 0.028, M.black);
-  tube([V(2.8, 2.62, -1.3), V(3.45, 2.1, -0.6), V(3.45, -2.3, -0.3), V(2.7, -2.56, -0.06)], 0.035, wGrey);
-  tube([V(0, -3.62, 0.25), V(1.6, -3.55, -0.3), V(3.3, -2.9, -0.45), V(3.45, -2.4, -0.32)], 0.03, M.blue);
-  box(1.2, 0.012, 1.3, wGrey, 0, 2.645, -0.6);   // Flachbandkabel zur Laufschrift-Platine
-  reels.forEach((reel, c) => {
-    const x = reelX(c), side = x + CELL_W / 2 + 0.07;
-    tube([V(x - 0.25, -1.32, zc + 1.6), V(x + 0.3, -1.3, zc + 0.6), V(x + 0.36, -0.22, zc)], 0.018, wGrey);   // Leuchtplatine → Motorhalter
-    tube([V(side - 0.04, -0.6, zc - 2.06), V(side, -0.3, zc - 2.2), V(side, 0, zc - 2.28)], 0.016, M.black);   // Lichtschranke → Halter
-  });
   mech.light = add(new THREE.PointLight(0xdfefff, 0.45, 9)); mech.light.position.set(0, 1.2, -1.2);
+  updateSpring();
 }
-// Münze läuft vom Einwurf durch den Münzprüfer und das Fallrohr in den Hopper
-let coinRun = null;
-const COIN_PATH = window.THREE ? new THREE.CatmullRomCurve3([[3.55, 2.24, 0.75], [3.55, 2.24, 0.3], [3.3, 2.05, -0.6], [3.55, 0.6, -0.9], [3.6, -2.6, -1.1], [3.1, -3.7, -1.9], [2.3, -4.15, -2.3]].map(a => new THREE.Vector3(...a))) : null;
-export function startCoinRun(){
-  if (!world.scene) return;
-  if (!coinRun){
-    coinRun = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.03, 20), new THREE.MeshStandardMaterial({ color:0xd8b25a, metalness:1, roughness:0.25 }));
-    world.scene.add(coinRun);
-  }
-  coinRun.visible = true; coinRun.userData.t0 = now();
+
+/** Zugfeder mit Ösen an beiden Enden; Länge folgt dem Abstand Anker ↔ Stift an der Nockenscheibe. */
+function buildSpring(add, mat, anchor){
+  const g = add(new THREE.Group()); g.position.copy(anchor);
+  const coil = [], turns = 16, L0 = 1.0;
+  for (let i = 0; i <= turns * 24; i++){ const a = i / 24 * Math.PI * 2; coil.push(V(Math.sin(a) * 0.055, i / (turns * 24) * L0, Math.cos(a) * 0.055)); }
+  const body = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(coil), turns * 24, 0.012, 5, false), mat);
+  const eyeGeo = new THREE.TorusGeometry(0.05, 0.012, 6, 20), stemGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.09, 6);
+  const mkEnd = () => {
+    const e = new THREE.Group();
+    const eye = new THREE.Mesh(eyeGeo, mat); eye.rotation.y = Math.PI / 2; e.add(eye);   // Öse in der y-z-Ebene, der Stift (x-Achse) geht hindurch
+    const stem = new THREE.Mesh(stemGeo, mat); stem.position.y = -0.095; e.add(stem);
+    return e;
+  };
+  const top = mkEnd(), bot = mkEnd(); bot.rotation.x = Math.PI;
+  g.add(body, top, bot);
+  g.userData = { body, top, bot, L0, eye:0.05, stem:0.14, len:0 };
+  return g;
 }
-export function updateCoinRun(t){
-  if (!coinRun || !coinRun.visible) return;
-  const x = (t - coinRun.userData.t0) / (S.turbo ? 700 : 1400);
-  if (x >= 1){ coinRun.visible = false; return; }
-  coinRun.position.copy(COIN_PATH.getPoint(x));
-  coinRun.rotation.set(Math.PI / 2, 0, x * 25);
+const _pin = window.THREE ? new THREE.Vector3() : null, _d = window.THREE ? new THREE.Vector3() : null, _up = window.THREE ? new THREE.Vector3(0, 1, 0) : null;
+function updateSpring(){
+  const s = mech.spring, cam = mech.cam; if (!s || !cam) return;
+  cam.updateMatrixWorld(true);
+  // Stift an der Nockenscheibe in Weltkoordinaten; die Ösen hängen innen am Stift (Mittelpunkt um den Ösenradius versetzt)
+  _pin.set(-0.07, 0, -0.26).applyMatrix4(cam.matrixWorld);
+  _d.copy(_pin).sub(s.position);
+  const len = _d.length(), u = s.userData;
+  s.quaternion.setFromUnitVectors(_up, _d.normalize());
+  u.bot.position.set(0, u.eye, 0);
+  u.top.position.set(0, len - u.eye, 0);
+  u.body.position.set(0, u.eye + u.stem, 0); u.body.scale.set(1, Math.max(0.1, len - 2 * (u.eye + u.stem)) / u.L0, 1);
+  u.len = len;
 }
 export function animateMech(dt){
   if (!mech.cam || !mech.cam.visible) return;
-  // Nockenscheibe folgt dem Hebel, Feder dehnt sich mit
+  // Nockenscheibe folgt dem Hebel, Feder wird zwischen Anker und Stift gespannt
   mech.cam.rotation.x = world.lever ? world.lever.angle : 0;
-  if (mech.spring) mech.spring.scale.y = 1 + (world.lever ? world.lever.angle : 0) * 0.28;
+  updateSpring();
   // Hopper-Rührscheibe läuft, solange Münzen ausgezahlt werden
   if (mech.agitator && world.coins && now() < world.coins.emitUntil) mech.agitator.rotation.y += dt * 4;
 }
