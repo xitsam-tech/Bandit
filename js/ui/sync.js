@@ -11,7 +11,6 @@ import { updateLamps } from '../scene/lamps.js';
 import { updateSticky } from '../scene/sticky.js';
 import { renderDebug } from './debug.js';
 
-
 export function syncUI(){
   const lines = activeLines(), bet = betValue(), cost = bet * lines.length, free = S.freeSpins > 0;
   $('credits').textContent = fmt(S.credits);

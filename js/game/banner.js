@@ -32,4 +32,5 @@ export function closeBanner(){
   const st = rt.bannerState; clearTimeout(st.timer); rt.bannerState = null;
   $('banner').hidden = true; if (st.resolve) st.resolve();
 }
+// Wie im Original beim Laden registriert (vor bindUI): Klick aufs Banner schließt es.
 $('banner').addEventListener('click', closeBanner);
