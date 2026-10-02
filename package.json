@@ -1,0 +1,19 @@
+{
+  "name": "einarmiger-bandit",
+  "version": "1.0.0",
+  "description": "Einarmiger Bandit 3D – browserbasierter Spielautomat (Three.js r128, native ES-Module, ohne Build)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "node tools/serve.mjs 8080",
+    "test": "node --test tests/unit/*.test.mjs",
+    "test:e2e": "node --test --test-concurrency=1 tests/e2e/*.test.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0",
+    "three": "0.128.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
