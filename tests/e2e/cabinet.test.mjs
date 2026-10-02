@@ -1,7 +1,7 @@
 // Gehäusewahl, Glas-Innenleben, Münzschale, Ansichten (Vorlagen: run8.js, glass.js, traytest.js, mechlook.js).
 import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openGame, targets, selfTests } from './helpers.mjs';
+import { openGame, targets, selfTests, SELFTEST_OK } from './helpers.mjs';
 
 for (const [name, file] of targets()){
   describe(`Gehäuse & Münzschale (${name})`, { timeout: 300000 }, () => {
@@ -29,15 +29,21 @@ for (const [name, file] of targets()){
         { hidden: true, transparent: false, back: true });
     });
 
-    test('Mega Win: Münzen landen in der Schale', async () => {
-      await g.page.evaluate(() => { const orig = __t.defaultMatrix; let n = 0; __t.setMatrix(() => (++n === 1 ? Array.from({ length: 4 }, () => Array(5).fill(5)) : orig())); __bandit.spin(); });
+    // walzenbezogen (Gewinn über Stopppositionen erzwungen) → nur gegen die neue Fassung
+    test('Mega Win: Münzen landen in der Schale', { skip: name === 'legacy' && 'walzenbezogen' }, async () => {
+      const expWon = await g.page.evaluate(() => {
+        const lines = __bandit.buildLines();
+        const mega = __t.findStops(m => { const e = __bandit.evaluate(m, lines); return e.lineTotal >= 25 * lines.length && !e.jackpot && e.scatter.count < 3 && e.clover.count < 4; });
+        let n = 0; __t.setStops(() => (++n === 1 ? mega : __bandit.randomStops())); __bandit.spin();
+        return __bandit.evaluate(__bandit.matrixFromStops(mega), lines).lineTotal * 0.5;
+      });
       await g.page.waitForTimeout(1000);
       await g.page.waitForFunction(() => !__t.spinning && !__t.busy, null, { timeout: 40000 });
-      await g.page.evaluate(() => { __t.setMatrix(null); if (__t.gamble) document.getElementById('gTake').click(); __t.orbit.yaw = 0.36; __t.orbit.pitch = 0.1; __t.orbit.zoom = 1; });
+      await g.page.evaluate(() => { __t.setStops(null); if (__t.gamble) document.getElementById('gTake').click(); __t.orbit.yaw = 0.36; __t.orbit.pitch = 0.1; __t.orbit.zoom = 1; });
       // Münzphysik rechnet pro Bild (dt ≤ 50 ms); Software-Rendering liefert nur wenige Bilder pro Sekunde → großzügig warten
       await g.page.waitForFunction(() => __t.coins.items.some(i => i.alive && i.rest), null, { timeout: 90000 }).catch(() => {});
       const r = await g.page.evaluate(() => ({ rest: __t.coins.items.filter(i => i.alive && i.rest).length, flying: __t.coins.items.filter(i => i.alive && !i.rest).length, won: __t.S.stats.won }));
-      assert.equal(r.won, 900, '10 Linien × 180 × 0,50');
+      assert.equal(r.won, expWon, 'Linien × Quote × 0,50');
       assert.ok(r.rest >= 1, `Münzen in der Schale: ${r.rest} (noch unterwegs: ${r.flying})`);
     });
 
@@ -57,7 +63,7 @@ for (const [name, file] of targets()){
       // Software-Rendering liefert nur wenige Bilder pro Sekunde (dt ist pro Bild auf 50 ms begrenzt) → nur Richtung prüfen
       assert.ok(dy > 0.01, 'Drehung in 3 s: ' + dy.toFixed(2) + ' rad');
       await g.page.click('#viewBtn'); assert.equal(await g.page.textContent('#viewBtn'), 'Ansicht: 3D');
-      assert.equal(await selfTests(g.page), '18/18 bestanden');
+      assert.equal(await selfTests(g.page), name === 'legacy' ? '18/18 bestanden' : SELFTEST_OK);
     });
 
     test('keine Konsolenfehler', () => { assert.deepEqual(g.errors, []); });
