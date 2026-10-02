@@ -6,6 +6,26 @@ import { world } from './context.js';
 import { TRAY } from './lower-cabinet.js';
 import { updateCoinRun } from './coin-chute.js';
 
+/* Mulde der Münzschale (aus TRAY): Münzmittelpunkt bleibt COIN_M innerhalb der Innenwand, Ecken gerundet */
+const COIN_M = 0.19;
+const bowl = () => { const T = TRAY; return { cx:(T.x0 + T.x1) / 2, cz:(T.z0 + T.z1) / 2, hw:(T.x1 - T.x0) / 2 - COIN_M, hd:(T.z1 - T.z0) / 2 - COIN_M, r:Math.max(0.03, T.r - COIN_M) }; };
+function inBowl(p){ const T = TRAY; return p.x > T.x0 - 0.05 && p.x < T.x1 + 0.05 && p.z > T.z0 - 0.05 && p.z < T.z1 + 0.05; }
+function rimY(z){ const T = TRAY, u = clamp((z - T.z0) / (T.z1 - T.z0), 0, 1), s = u * u * (3 - 2 * u); return T.back + (T.top - T.back) * Math.min(1, s * 1.6); }
+function clampBowl(p, v){
+  const b = bowl(), dx = p.x - b.cx, dz = p.z - b.cz, sx = Math.sign(dx) || 1, sz = Math.sign(dz) || 1;
+  const qx = Math.abs(dx) - (b.hw - b.r), qz = Math.abs(dz) - (b.hd - b.r);
+  if (qx > 0 && qz > 0){
+    const d = Math.hypot(qx, qz);
+    if (d > b.r){
+      const nx = qx / d * sx, nz = qz / d * sz;
+      p.x = b.cx + sx * (b.hw - b.r) + nx * b.r; p.z = b.cz + sz * (b.hd - b.r) + nz * b.r;
+      const vn = v.x * nx + v.z * nz; if (vn > 0){ v.x -= 1.4 * vn * nx; v.z -= 1.4 * vn * nz; }
+    }
+    return;
+  }
+  if (Math.abs(dx) > b.hw){ p.x = b.cx + sx * b.hw; if (v.x * sx > 0) v.x *= -0.4; }
+  if (Math.abs(dz) > b.hd){ p.z = b.cz + sz * b.hd; if (v.z * sz > 0) v.z *= -0.4; }
+}
 export function buildCoins(){
   const n = REDUCED ? 30 : 140;
   const geo = new THREE.CylinderGeometry(0.15, 0.15, 0.035, 24);
@@ -45,17 +65,14 @@ export function updateCoins(dt, t){
     if (!it.rest){
       it.life += dt; it.v.y -= 11 * dt; it.p.addScaledVector(it.v, dt);
       it.r.x += it.w.x * dt; it.r.y += it.w.y * dt; it.r.z += it.w.z * dt;
-      const T = TRAY, inX = it.p.x > T.x0 + 0.12 && it.p.x < T.x1 - 0.12, inZ = it.p.z > T.z0 && it.p.z < T.z1 - 0.1;
-      // Wände der Schale: Münzen prallen innen ab
-      if (it.p.y < T.floor + 0.2){
-        if (it.p.x < T.x0 + 0.12 || it.p.x > T.x1 - 0.12){ it.v.x *= -0.4; it.p.x = clamp(it.p.x, T.x0 + 0.12, T.x1 - 0.12); }
-        if (it.p.z > T.z1 - 0.1){ it.v.z *= -0.4; it.p.z = T.z1 - 0.1; }
-      }
-      // Liegenbleiben: flach auf dem Boden der Schale (leicht gestapelt)
-      if (it.p.y <= T.floor + 0.02 && it.v.y < 0 && inX && inZ){
+      // Mulde: Münzen prallen an den (gerundeten) Innenwänden ab und bleiben flach auf der Gummimatte liegen
+      const T = TRAY, inside = inBowl(it.p);
+      if (inside && it.p.y < rimY(it.p.z)) clampBowl(it.p, it.v);
+      const restY = T.floor + T.mat + 0.018;
+      if (inside && it.p.y <= restY && it.v.y < 0){
         it.rest = true; world.coins.pile++;
-        it.p.y = T.floor + 0.02 + Math.min(0.25, world.coins.pile * 0.004) * rand();
-        it.r.set((rand() - 0.5) * 0.25, rand() * 6, (rand() - 0.5) * 0.25);
+        it.p.y = restY + Math.min(0.25, world.coins.pile * 0.004) * rand();
+        it.r.set((rand() - 0.5) * 0.12, rand() * 6, (rand() - 0.5) * 0.12);
       }
     }
     if (!it.rest && (it.p.y < -6 || it.life > 6)){ it.alive = false; d.scale.set(0, 0, 0); }
