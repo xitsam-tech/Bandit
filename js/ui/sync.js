@@ -2,7 +2,7 @@
 import { BET_STEPS, JP_MAX } from '../core/config.js';
 import { activeLines, betValue, coveredRows } from '../core/lines.js';
 import { xpNeed } from '../core/progression.js';
-import { rt } from '../core/runtime.js';
+import { rt, selectionLocked } from '../core/runtime.js';
 import { S } from '../core/state.js';
 import { fmt } from '../core/util.js';
 import { $ } from '../dom.js';
@@ -11,7 +11,6 @@ import { updateLamps } from '../scene/lamps.js';
 import { updateSticky } from '../scene/sticky.js';
 import { renderDebug } from './debug.js';
 
-export function selectionLocked(){ return rt.spinning || S.freeSpins > 0; }
 
 export function syncUI(){
   const lines = activeLines(), bet = betValue(), cost = bet * lines.length, free = S.freeSpins > 0;

@@ -1,23 +1,23 @@
-/** Render-Schleife: Animationen, Kamera-Rig, Lichter und Zeichnen pro Frame. */
-import { rt } from '../core/runtime.js';
-import { S } from '../core/state.js';
-import { clamp, mod, now } from '../core/util.js';
-import { REDUCED } from '../dom.js';
-import { updatePresentation } from '../game/presentation.js';
-import { Ticker } from '../gfx/ticker.js';
-import { orbit, pointer } from './camera.js';
-import { updateCard } from './card.js';
-import { updateCoins } from './coins.js';
-import { VIEW } from './constants.js';
-import { lamps, world } from './context.js';
-import { updateLever } from './lever.js';
-import { updateDeck } from './lower-cabinet.js';
-import { animateMech } from './mechanics.js';
-import { updateFlashes, updateReels } from './reel-motion.js';
-import { animateSticky } from './sticky.js';
-import { CAB_STYLES } from './styles.js';
-import { updateWheel } from './wheel.js';
-import { drawOverlay } from '../ui/overlay.js';
+/** Render-Schleife: Animationen, Kamera-Rig, Lichter und Zeichnen pro Frame (verbindet Szene, Präsentation und Overlay). */
+import { rt } from './core/runtime.js';
+import { S } from './core/state.js';
+import { clamp, mod, now } from './core/util.js';
+import { REDUCED } from './dom.js';
+import { updatePresentation } from './game/presentation.js';
+import { Ticker } from './gfx/ticker.js';
+import { orbit, pointer } from './scene/camera.js';
+import { updateCard } from './scene/card.js';
+import { updateCoins } from './scene/coins.js';
+import { VIEW } from './scene/constants.js';
+import { lamps, world } from './scene/context.js';
+import { updateLever } from './scene/lever.js';
+import { updateDeck } from './scene/lower-cabinet.js';
+import { animateMech } from './scene/mechanics.js';
+import { updateFlashes, updateReels } from './scene/reel-motion.js';
+import { animateSticky } from './scene/sticky.js';
+import { CAB_STYLES } from './scene/styles.js';
+import { updateWheel } from './scene/wheel.js';
+import { drawOverlay } from './ui/overlay.js';
 
 let lastT = now(), bulbColor = window.THREE ? new THREE.Color() : null, _bulbTmp = window.THREE ? new THREE.Color() : null;
 const camTarget = window.THREE ? { pos:new THREE.Vector3(), look:new THREE.Vector3() } : null;

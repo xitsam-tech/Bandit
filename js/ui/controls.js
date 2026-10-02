@@ -2,12 +2,13 @@
 import { Snd } from '../audio/sound.js';
 import { BET_STEPS } from '../core/config.js';
 import { buildLines, coveredRows, spinCost } from '../core/lines.js';
+import { selectionLocked } from '../core/runtime.js';
 import { S, saveState } from '../core/state.js';
 import { clamp, fmt } from '../core/util.js';
 import { $ } from '../dom.js';
 import { clearPresentation } from '../game/presentation.js';
 import { Ticker } from '../gfx/ticker.js';
-import { selectionLocked, syncUI } from './sync.js';
+import { syncUI } from './sync.js';
 
 /* =========================================================
    UI-Bindung

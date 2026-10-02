@@ -1,6 +1,6 @@
 /** Unterbau: schräges Tasten-Deck, Belly-Glass (Artwork/Risikoleiter), Münzeinwurf, Münzschale, Sockel. */
 import { BET_STEPS, CLOVER, DIAMOND, GAMBLE_MAX_STEPS, SCATTER } from '../core/config.js';
-import { rt } from '../core/runtime.js';
+import { rt, selectionLocked } from '../core/runtime.js';
 import { S } from '../core/state.js';
 import { fmt } from '../core/util.js';
 import { $ } from '../dom.js';
@@ -9,7 +9,6 @@ import { drawSymbolArt } from '../gfx/symbols.js';
 import { pickables, world } from './context.js';
 import { canvasTex, frameMesh, rrShape } from './helpers.js';
 import { CAB_STYLES } from './styles.js';
-import { selectionLocked } from '../ui/sync.js';
 
 /* ----- Unterbau nach Vorbild echter Geräte: schräges Tasten-Deck, Belly-Glass, Sockel ----- */
 export const deck = { buttons:[], group:null };

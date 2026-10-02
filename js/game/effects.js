@@ -1,10 +1,8 @@
-/** Kleine Rückmeldungen: Vibration und hochzählende Gewinnanzeige. */
+/** Hochzählende Gewinnanzeige (LCD und Pult). */
 import { Snd } from '../audio/sound.js';
 import { fmt, now } from '../core/util.js';
 import { $ } from '../dom.js';
 import { LCD } from '../gfx/lcd.js';
-
-export function buzz(p){ try { if (navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(p); } catch(e){} }
 
 export function animateCount(lcd, target){
   const id = lcd._anim = (lcd._anim || 0) + 1;

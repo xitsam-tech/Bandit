@@ -1,4 +1,5 @@
 // @ts-check
+import { S } from './state.js';
 /**
  * Laufzeit-Zustand des Spielablaufs (wird nicht gespeichert).
  * Ein gemeinsames, veränderliches Objekt, weil ES-Modul-Exporte von außen nicht neu zugewiesen werden können:
@@ -38,3 +39,6 @@ export const rt = {
   shake: 0,
   hoverBand: null,
 };
+
+/** Linienwahl und Einsatz sind gesperrt, solange die Walzen laufen oder Freispiele offen sind. */
+export function selectionLocked(){ return rt.spinning || S.freeSpins > 0; }
