@@ -8,7 +8,7 @@ import { lamps, world } from './context.js';
 import { bulbRing } from './bulbs.js';
 import { deck } from './lower-cabinet.js';
 import { registerBoardPorts, registerChannel, registerPort, registerSolid, requirePorts } from './cables.js';
-import { V } from './geo.js';
+import { Batch, V } from './geo.js';
 import { worldPorts } from './pcb.js';
 import { buttonBoard, displayBoard, lampDriverBoard, mainBoard, psuBoard } from './boards.js';
 import { buildCoinChutes } from './coin-chute.js';
@@ -168,5 +168,8 @@ export function buildInterior(add, M, b){
     const bb = buttonBoard(deck.buttons.map(btn => ({ id:btn.id, x:btn.group.position.x })));
     mech.pcbs.push({ name:'Tastenplatine', stats:bb.stats });
     placeBoard(add, bb, V(0, -0.42, 0), V(1, 0, 0), V(0, 1, 0), '', false, deck.group);
+    // Abstandsbolzen von der Platine zur Pultplatte (im Pult-Koordinatensystem)
+    const sb = new Batch(); [-3.22, 3.22].forEach(x => standoff(sb, M, V(x, -0.405, 0), V(x, -0.02, 0)));
+    sb.flush(m => add(m, deck.group));
   }
 }

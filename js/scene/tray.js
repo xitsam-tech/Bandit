@@ -75,7 +75,7 @@ export function buildTray(T, chrome){
   mat.position.set(cx, T.floor + 0.002, cz); grp.add(mat);
   // weicher Lichtschein der Schalenlampe auf der Matte
   const lc = document.createElement('canvas'); lc.width = lc.height = 64; const lx = lc.getContext('2d');
-  const lg = lx.createRadialGradient(32, 32, 0, 32, 32, 32); lg.addColorStop(0, 'rgba(255,214,150,0.55)'); lg.addColorStop(1, 'rgba(255,214,150,0)');
+  const lg = lx.createRadialGradient(32, 32, 0, 32, 32, 32); lg.addColorStop(0, 'rgba(255,214,150,0.32)'); lg.addColorStop(1, 'rgba(255,214,150,0)');
   lx.fillStyle = lg; lx.fillRect(0, 0, 64, 64);
   const glow = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.0), new THREE.MeshBasicMaterial({ map:new THREE.CanvasTexture(lc), transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false }));
   glow.rotation.x = -Math.PI / 2; glow.position.set(cx, T.floor + T.mat + 0.01, T.z0 + 0.42); grp.add(glow);
