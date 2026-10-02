@@ -1,0 +1,72 @@
+// @ts-check
+/** Persistenter Spielzustand S sowie Laden/Speichern (localStorage bzw. Hot-Reload-Daten). */
+import { BET_STEPS, COLS, JP_MAX, JP_SEED, ROWS, START_CREDITS, STORE_KEY, SYMBOLS } from './config.js';
+import { clamp } from './util.js';
+
+/* =========================================================
+   Zustand & Speicher
+   ========================================================= */
+export const S = {
+  credits: START_CREDITS,
+  betIdx: 2,
+  singles: [false,false,false,false],
+  pairs: [true,true,true],
+  jackpot: JP_SEED,
+  sound: true,
+  showLines: false,
+  freeSpins: 0, fsBetIdx: 2, fsLines: null, fsWon: 0,
+  stats: { spins:0, wagered:0, won:0, biggest:0, fsTriggers:0, jackpots:0, wheels:0, gambleNet:0 },
+  matrix: null,
+  sticky: [], level: 1, xp: 0, music: false, turbo: false, history: [], pending: null, cabinet: 'neon', brightness: 0.85, gambleRefund: 0, wheelPending: null, view: '3d'
+};
+
+export function loadState(extra){
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch(e){}
+  const src = (extra && extra.state) || saved;
+  if (!src || typeof src !== 'object') return;
+  if (Number.isFinite(src.credits)) S.credits = Math.max(0, src.credits);
+  if (Number.isInteger(src.betIdx)) S.betIdx = clamp(src.betIdx, 0, BET_STEPS.length - 1);
+  if (Array.isArray(src.singles) && src.singles.length === 4) S.singles = src.singles.map(Boolean);
+  if (Array.isArray(src.pairs) && src.pairs.length === 3) S.pairs = src.pairs.map(Boolean);
+  if (Number.isFinite(src.jackpot)) S.jackpot = clamp(src.jackpot, JP_SEED, JP_MAX);
+  if (typeof src.sound === 'boolean') S.sound = src.sound;
+  if (typeof src.showLines === 'boolean') S.showLines = src.showLines;
+  const validKeys = a => a.filter(k => Number.isInteger(k) && k >= 0 && k < ROWS * COLS);
+  const hasFsLines = Array.isArray(src.fsLines) && src.fsLines.length > 0;
+  const restoreFs = () => { S.fsLines = src.fsLines; S.fsBetIdx = clamp(src.fsBetIdx|0, 0, BET_STEPS.length - 1); S.fsWon = +src.fsWon || 0; };
+  if (Number.isInteger(src.freeSpins) && src.freeSpins > 0 && hasFsLines){ S.freeSpins = src.freeSpins; restoreFs(); }
+  if (src.stats && typeof src.stats === 'object') Object.assign(S.stats, src.stats);
+  if (Array.isArray(src.sticky) && S.freeSpins > 0) S.sticky = validKeys(src.sticky);
+  if (Number.isInteger(src.level) && src.level > 0) S.level = src.level;
+  if (Number.isFinite(src.xp) && src.xp >= 0) S.xp = src.xp;
+  if (typeof src.music === 'boolean') S.music = src.music;
+  if (typeof src.turbo === 'boolean') S.turbo = src.turbo;
+  if (['3d', 'front', 'turn'].includes(src.view)) S.view = src.view;
+  if (['neon', 'wood', 'piano', 'glass'].includes(src.cabinet)) S.cabinet = src.cabinet;
+  if (Number.isFinite(src.brightness)) S.brightness = clamp(src.brightness, 0.5, 1.2);
+  // Unterbrochene Risikoentscheidung / Glücksrad: Einsatz bzw. Rad nach dem Neuladen nicht verlieren
+  if (Number.isFinite(src.gambleRefund) && src.gambleRefund > 0) S.gambleRefund = src.gambleRefund;
+  if (src.wheelPending && Number.isFinite(src.wheelPending.stake) && src.wheelPending.stake > 0) S.wheelPending = { stake: src.wheelPending.stake };
+  if (Array.isArray(src.history)) S.history = src.history.slice(0, 14);
+  const validM = m => Array.isArray(m) && m.length === ROWS &&
+    m.every(r => Array.isArray(r) && r.length === COLS && r.every(v => Number.isInteger(v) && v >= 0 && v < SYMBOLS.length));
+  if (validM(src.matrix)) S.matrix = src.matrix;
+  const p = src.pending;
+  if (p && validM(src.matrix) && Array.isArray(p.lines) && p.lines.length && Number.isInteger(p.betIdx)){
+    S.pending = { free: !!p.free, lines: p.lines, betIdx: clamp(p.betIdx, 0, BET_STEPS.length - 1), held: Array.isArray(p.held) ? p.held.map(Boolean) : undefined };
+    // Unterbrochenes Freispiel: Klebe-Joker und Linien auch dann zurückholen, wenn freeSpins schon 0 war
+    if (p.free && Array.isArray(src.sticky)) S.sticky = validKeys(src.sticky);
+    if (p.free && hasFsLines) restoreFs();
+  }
+}
+export function snapshot(){
+  return {
+    credits:S.credits, betIdx:S.betIdx, singles:S.singles, pairs:S.pairs, jackpot:S.jackpot,
+    sound:S.sound, showLines:S.showLines, freeSpins:S.freeSpins, fsBetIdx:S.fsBetIdx,
+    fsLines:S.fsLines, fsWon:S.fsWon, stats:S.stats, matrix:S.matrix,
+    sticky:S.sticky, level:S.level, xp:S.xp, music:S.music, turbo:S.turbo, view:S.view, history:S.history, pending:S.pending, cabinet:S.cabinet,
+    brightness:S.brightness, gambleRefund:S.gambleRefund, wheelPending:S.wheelPending
+  };
+}
+export function saveState(){ try { localStorage.setItem(STORE_KEY, JSON.stringify(snapshot())); } catch(e){} }

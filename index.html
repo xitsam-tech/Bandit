@@ -1,0 +1,153 @@
+<meta charset="utf-8">
+<title>Einarmiger Bandit 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Chakra+Petch:wght@400;600;700&family=Orbitron:wght@600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+
+<div class="app">
+  <section class="stage" id="stage" aria-label="Spielautomat">
+    <canvas id="gl"></canvas>
+    <canvas id="fx"></canvas>
+    <p class="stage-hint" id="stageHint">Ziehen dreht die Ansicht · Rad zoomt · Doppelklick: zurück</p>
+    <div class="gamble" id="gamble" hidden aria-live="polite">
+      <div class="g-head"><span class="label">Risiko-Leiter</span><b id="gAmt">0.00</b><span class="g-next" id="gNext"></span></div>
+      <div class="g-steps" id="gSteps"></div>
+      <div class="g-btns">
+        <button class="g-red" id="gRed">Rot ♥♦</button>
+        <button id="gTake">Nehmen</button>
+        <button class="g-black" id="gBlack">Schwarz ♠♣</button>
+      </div>
+      <div class="g-hist" id="gHist"></div>
+    </div>
+    <div class="banner" id="banner" hidden>
+      <div class="banner-inner">
+        <div class="banner-title" id="bannerTitle">BIG WIN</div>
+        <div class="banner-amt" id="bannerAmt">0.00</div>
+        <div class="banner-sub" id="bannerSub">Tippen zum Fortfahren</div>
+      </div>
+    </div>
+    <div class="glfail" id="glfail" hidden>
+      <div><strong>3D nicht verfügbar</strong>Dein Browser hat WebGL deaktiviert. Aktiviere Hardware-Beschleunigung und lade die Seite neu.</div>
+    </div>
+  </section>
+
+  <aside class="deck" aria-label="Bedienpult">
+    <div class="brand">
+      <h1>Einarmiger Bandit</h1>
+      <small>5 Walzen · 4 Reihen · bis 10 Linien</small>
+    </div>
+    <div class="lvl"><span class="label">Level <b id="lvl">1</b></span><div class="xp" aria-hidden="true"><i id="xpBar"></i></div><span class="label" id="xpTxt">0 / 40 XP</span></div>
+
+    <div class="card jp" aria-live="polite">
+      <div class="jp-top"><span class="label">Progressiver Jackpot</span><span class="jp-val" id="jpVal">0.00</span></div>
+      <div class="meter" aria-hidden="true"><i id="jpBar"></i></div>
+      <p class="jp-note">5 × 💎 auf einer aktiven Linie gewinnt den ganzen Topf.</p>
+    </div>
+
+    <div class="hud">
+      <div class="stat"><span class="label">Credits</span><b id="credits">0.00</b></div>
+      <div class="stat win"><span class="label">Letzter Gewinn</span><b id="lastWin">0.00</b></div>
+      <div class="stat">
+        <span class="label">Einsatz pro Linie</span>
+        <div class="betrow">
+          <button class="sq" id="betDown" aria-label="Einsatz senken">−</button>
+          <b id="bet">0.50</b>
+          <button class="sq" id="betUp" aria-label="Einsatz erhöhen">+</button>
+        </div>
+      </div>
+      <div class="stat cost"><span class="label">Gesamteinsatz</span><b id="cost">0.00</b><span class="label" id="lineCount">10 Linien</span></div>
+    </div>
+
+    <div class="play">
+      <button class="spin" id="spinBtn">DREHEN</button>
+      <div class="side">
+        <button class="toggle" id="autoBtn" aria-pressed="false">Auto</button>
+        <button id="maxBtn">Max</button>
+      </div>
+    </div>
+    <button class="refill" id="refillBtn">Neues Spiel · 100 Credits</button>
+    <p class="status" id="status" role="status" aria-live="polite">Wähle Linien und zieh den Hebel.</p>
+
+    <div class="card cab">
+      <div class="chips" role="group" aria-label="Gehäuse-Optik">
+        <span class="label">Gehäuse</span>
+        <button class="chip cabopt" id="cab-neon" data-cab="neon" aria-pressed="false">Neon</button>
+        <button class="chip cabopt" id="cab-wood" data-cab="wood" aria-pressed="false">Holz</button>
+        <button class="chip cabopt" id="cab-piano" data-cab="piano" aria-pressed="false">Klavierlack</button>
+        <button class="chip cabopt" id="cab-glass" data-cab="glass" aria-pressed="false">Glas</button>
+      </div>
+      <label class="bright" for="brightRange"><span class="label">Helligkeit</span>
+        <input type="range" id="brightRange" min="50" max="120" step="5" value="85">
+        <b id="brightVal">85 %</b></label>
+    </div>
+    <div class="card lines">
+      <h2>Gewinnlinien</h2>
+      <p>Eine Reihe zählt als 1 Linie. Ein Paar spielt 4 Linien: beide Reihen gerade und zweimal im Zickzack.</p>
+      <div class="chips" role="group" aria-label="Einzelreihen">
+        <span class="label">Reihen</span>
+        <button class="chip" id="row0" aria-pressed="false">1</button>
+        <button class="chip" id="row1" aria-pressed="false">2</button>
+        <button class="chip" id="row2" aria-pressed="false">3</button>
+        <button class="chip" id="row3" aria-pressed="false">4</button>
+      </div>
+      <div class="chips" role="group" aria-label="Reihenpaare">
+        <span class="label">Paare</span>
+        <button class="chip" id="pair0" aria-pressed="false">1–2</button>
+        <button class="chip" id="pair1" aria-pressed="false">2–3</button>
+        <button class="chip" id="pair2" aria-pressed="false">3–4</button>
+      </div>
+    </div>
+
+    <div class="tools">
+      <button class="toggle" id="soundBtn" aria-pressed="true">Ton an</button>
+      <button class="toggle" id="linesBtn" aria-pressed="false">Linien zeigen</button>
+      <button class="toggle" id="musicBtn" aria-pressed="false">Musik</button>
+      <button class="toggle" id="turboBtn" aria-pressed="false">Turbo</button>
+      <button id="viewBtn">Ansicht: 3D</button>
+      <button id="payBtn">Gewinnplan</button>
+      <button id="debugBtn">Debug</button>
+    </div>
+    <div class="hist-wrap"><span class="label">Verlauf</span><div class="hist" id="hist"></div></div>
+  </aside>
+</div>
+
+<div class="modal" id="payModal" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="payTitle">
+    <div class="sheet-head"><h3 id="payTitle">Gewinnplan</h3><button id="payClose">Schließen</button></div>
+    <div class="pt" id="ptGrid"></div>
+    <ul class="rules">
+      <li>Gewinne zählen von der <b>linken Walze</b> an: 3, 4 oder 5 gleiche Symbole in Folge auf einer aktiven Linie. Werte sind Vielfache des Einsatzes pro Linie.</li>
+      <li><b>🃏 Joker</b> ersetzt jedes Symbol außer Bonus. Pro Linie zählt der höchste Gewinn.</li>
+      <li><b>💥 Bonus</b> zählt überall: 3 bringen 3, 4 bringen 5, 5 oder mehr bringen 8 Freispiele. In den Freispielen <b>bleibt jeder Joker kleben</b> und seine Walze wird bis zum Ende der Runde <b>gehalten</b>. Bonus und Klee auf gehaltenen Walzen sind abgedunkelt und zählen nicht – nur neu gelandete Symbole zählen. Freispiele können erneut ausgelöst werden.</li>
+      <li><b>🍀 Klee</b>: 4 oder mehr irgendwo starten das <b>Glücksrad</b>. Es zahlt 3× bis 25× deinen Gesamteinsatz.</li>
+      <li><b>Risiko-Leiter</b>: Nach einem Gewinn im Grundspiel kannst du ihn bis zu 5-mal verdoppeln. Tippe Rot oder Schwarz, die nächste Karte entscheidet. Daneben heißt: Der Gewinn ist weg. Tasten R, S und N funktionieren auch.</li>
+      <li><b>Level</b>: Jeder gesetzte Credit bringt 1 XP. Jedes neue Level schenkt dir Level × 5 Credits.</li>
+      <li><b>💎 Diamant</b>: 5 auf einer Linie gewinnen den progressiven Jackpot. 5 % jedes Einsatzes fließen in den Topf.</li>
+      <li>Klick auf <b>DREHEN</b> während die Walzen laufen stoppt sie sofort.</li>
+      <li><b>Auto</b> stoppt automatisch bei Big Win, Mega Win, Jackpot und Glücksrad ab 15×.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="modal" id="dbgModal" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="dbgTitle">
+    <div class="sheet-head"><h3 id="dbgTitle">Debug</h3><button id="dbgClose">Schließen</button></div>
+    <p class="label">Sichtbare 4×5-Matrix, direkt von den 3D-Walzen gelesen</p>
+    <div class="dbg-grid" id="dbgGrid"></div>
+    <div class="dbg-stats" id="dbgStats"></div>
+    <button id="testBtn">Self-Test starten</button>
+    <ul class="tests" id="testList"></ul>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/GammaCorrectionShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/objects/Reflector.js"></script>
+<script type="module" src="js/main.js"></script>
