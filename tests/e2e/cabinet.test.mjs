@@ -20,10 +20,10 @@ for (const [name, file] of targets()){
 
     test('Glas zeigt das Innenleben, Holz verbirgt es wieder', async () => {
       await g.page.click('#cab-glass'); await g.page.waitForTimeout(1500);
-      const glass = await g.page.evaluate(() => ({ cab: __t.S.cabinet, parts: __t.mech.parts.length, visible: __t.mech.parts.every(o => o.visible),
+      const glass = await g.page.evaluate(() => ({ cab: __t.S.cabinet, parts: (() => { let n = 0; __t.mech.parts.forEach(o => o.traverse(m => { if (m.isMesh) n++; })); return n; })(), visible: __t.mech.parts.every(o => o.visible),
         back: __t.mech.backPlate.visible, transparent: __t.lacquerMat.transparent, opacity: __t.lacquerMat.opacity }));
       assert.deepEqual(glass, { cab: 'glass', parts: glass.parts, visible: true, back: false, transparent: true, opacity: 0.09 });
-      assert.ok(glass.parts > 100, 'viele Innenteile');
+      assert.ok(glass.parts > 100, 'viele Innenteile (Meshes, Kleinteile sind je Material zusammengefasst): ' + glass.parts);
       await g.page.click('#cab-wood'); await g.page.waitForTimeout(800);
       assert.deepEqual(await g.page.evaluate(() => ({ hidden: __t.mech.parts.every(o => !o.visible), transparent: __t.lacquerMat.transparent, back: __t.mech.backPlate.visible })),
         { hidden: true, transparent: false, back: true });
