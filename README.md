@@ -13,6 +13,7 @@ ES-Module brauchen `http://` (über `file://` blockiert der Browser sie). Ein kl
 
 ```sh
 npm run serve          # = node tools/serve.mjs 8080
+npm run build:single   # Ein-Datei-Fassung nach dist/einarmiger-bandit.html (braucht esbuild)
 # dann http://127.0.0.1:8080/ öffnen
 ```
 
