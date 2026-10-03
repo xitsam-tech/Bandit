@@ -118,6 +118,8 @@ for (const [name, file] of targets({ reels: true })){
         __bandit.spin(); await __strips.idle(60000);
         const fs0 = S.freeSpins;
         __bandit.spin(); await __strips.idle(60000);
+        // Nachfedern des letzten Stopps abwarten, sonst misst der Vergleich die Federung mit
+        while (__t.reels.some(r => r.bounce)) await new Promise(r => setTimeout(r, 60));
         const sticky = S.sticky.slice(), stopsBefore = __bandit.readStops(), rotBefore = __t.reels.map(r => r.group.rotation.x);
         const visBefore = __bandit.readVisibleMatrix();
         const stickyOnJokers = sticky.every(k => visBefore[Math.floor(k / 5)][k % 5] === JOKER);
