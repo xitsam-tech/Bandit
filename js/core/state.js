@@ -1,11 +1,12 @@
 // @ts-check
 /** Persistenter Spielzustand S sowie Laden/Speichern (localStorage bzw. Hot-Reload-Daten). */
-import { BET_STEPS, COLS, JP_MAX, JP_SEED, ROWS, START_CREDITS, STORE_KEY, SYMBOLS } from './config.js';
+import { BET_STEPS, COLS, JOKER, JP_MAX, JP_SEED, ROWS, START_CREDITS, STORE_KEY } from './config.js';
+import { matrixFromStops, validStops } from './strips.js';
 import { clamp } from './util.js';
 
 /**
  * @typedef {import('./lines.js').Line} Line
- * @typedef {{ free: boolean, lines: Line[], betIdx: number, held?: boolean[] }} SpinCtx
+ * @typedef {{ free: boolean, lines: Line[], betIdx: number, held?: boolean[], stops?: number[] }} SpinCtx  stops: Ziel-Stopppositionen
  * @typedef {{ w: number, k: string }} HistoryEntry
  * @typedef {{ spins: number, wagered: number, won: number, biggest: number, fsTriggers: number, jackpots: number, wheels: number, gambleNet: number }} Stats
  * @typedef {object} State
@@ -21,7 +22,8 @@ import { clamp } from './util.js';
  * @property {Line[] | null} fsLines
  * @property {number} fsWon
  * @property {Stats} stats
- * @property {number[][] | null} matrix
+ * @property {number[] | null} stops       Stopppositionen der Walzen (während eines Drehs: dessen Ziel)
+ * @property {number[][] | null} matrix    daraus abgeleitete sichtbare Matrix (nur Anzeige/Kompatibilität)
  * @property {number[]} sticky
  * @property {number} level
  * @property {number} xp
@@ -50,7 +52,7 @@ export const S = {
   showLines: false,
   freeSpins: 0, fsBetIdx: 2, fsLines: null, fsWon: 0,
   stats: { spins:0, wagered:0, won:0, biggest:0, fsTriggers:0, jackpots:0, wheels:0, gambleNet:0 },
-  matrix: null,
+  stops: null, matrix: null,
   sticky: [], level: 1, xp: 0, music: false, turbo: false, history: [], pending: null, cabinet: 'neon', brightness: 0.85, gambleRefund: 0, wheelPending: null, view: '3d'
 };
 
@@ -89,24 +91,32 @@ export function loadState(extra){
   if (Number.isFinite(src.gambleRefund) && src.gambleRefund > 0) S.gambleRefund = src.gambleRefund;
   if (src.wheelPending && Number.isFinite(src.wheelPending.stake) && src.wheelPending.stake > 0) S.wheelPending = { stake: src.wheelPending.stake };
   if (Array.isArray(src.history)) S.history = src.history.slice(0, 14);
-  /** @type {(m: any) => boolean} */
-  const validM = m => Array.isArray(m) && m.length === ROWS &&
-    m.every(r => Array.isArray(r) && r.length === COLS && r.every(v => Number.isInteger(v) && v >= 0 && v < SYMBOLS.length));
-  if (validM(src.matrix)) S.matrix = src.matrix;
+  // Walzenstand: Stopppositionen (ältere Spielstände mit nur `matrix` → kein Stand, main.js wählt Startpositionen)
+  if (validStops(src.stops)) setStops(src.stops);
   const p = src.pending;
-  if (p && validM(src.matrix) && Array.isArray(p.lines) && p.lines.length && Number.isInteger(p.betIdx)){
-    S.pending = { free: !!p.free, lines: p.lines, betIdx: clamp(p.betIdx, 0, BET_STEPS.length - 1), held: Array.isArray(p.held) ? p.held.map(Boolean) : undefined };
+  if (p && Array.isArray(p.lines) && p.lines.length && Number.isInteger(p.betIdx)){
+    S.pending = { free: !!p.free, lines: p.lines, betIdx: clamp(p.betIdx, 0, BET_STEPS.length - 1), held: Array.isArray(p.held) ? p.held.map(Boolean) : undefined,
+      stops: validStops(p.stops) ? p.stops.slice() : undefined };
+    if (S.pending.stops) setStops(S.pending.stops);
     // Unterbrochenes Freispiel: Klebe-Joker und Linien auch dann zurückholen, wenn freeSpins schon 0 war
     if (p.free && Array.isArray(src.sticky)) S.sticky = validKeys(src.sticky);
     if (p.free && hasFsLines) restoreFs();
   }
+  if (S.stops) pruneSticky();
+}
+/** Walzenstand setzen (Stopppositionen + abgeleitete Matrix). @param {number[]} stops */
+export function setStops(stops){ S.stops = stops.slice(); S.matrix = matrixFromStops(S.stops); }
+/** Klebe-Joker nur dort behalten, wo die Walzen wirklich einen Joker zeigen (z. B. nach altem Spielstand). */
+export function pruneSticky(){
+  const m = S.matrix;
+  S.sticky = m ? S.sticky.filter(k => m[Math.floor(k / COLS)][k % COLS] === JOKER) : [];
 }
 /** Speicherbares Abbild des Zustands. */
 export function snapshot(){
   return {
     credits:S.credits, betIdx:S.betIdx, singles:S.singles, pairs:S.pairs, jackpot:S.jackpot,
     sound:S.sound, showLines:S.showLines, freeSpins:S.freeSpins, fsBetIdx:S.fsBetIdx,
-    fsLines:S.fsLines, fsWon:S.fsWon, stats:S.stats, matrix:S.matrix,
+    fsLines:S.fsLines, fsWon:S.fsWon, stats:S.stats, stops:S.stops, matrix:S.matrix,
     sticky:S.sticky, level:S.level, xp:S.xp, music:S.music, turbo:S.turbo, view:S.view, history:S.history, pending:S.pending, cabinet:S.cabinet,
     brightness:S.brightness, gambleRefund:S.gambleRefund, wheelPending:S.wheelPending
   };

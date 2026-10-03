@@ -30,11 +30,12 @@ js/main.js              Einstieg: Zustand laden, Szene aufbauen, UI binden, Schl
 js/loop.js              Render-Schleife pro Bild (Walzen, Präsentation, Kamera-Rig, Lichter, Overlay)
 js/dom.js               $(), Bühne, Overlay-Canvas, prefers-reduced-motion, Vibration
 js/core/                reine Spiellogik – ohne DOM und ohne THREE, in Node testbar
-  config.js             Symbole, WEIGHTS, PAY, WHEEL, FS_AWARD, Jackpot, Einsatzstufen
+  config.js             Symbole, PAY, WHEEL, FS_AWARD, Jackpot, Einsatzstufen
+  strips.js             feste Walzenstreifen REEL_STRIPS, matrixFromStops, findStops, checkStrips
   util.js               fmt, clamp, mod, now
-  rng.js                Zufall, sampleSymbol, randomMatrix (+ austauschbare Quellen für Tests)
-  state.js              gespeicherter Zustand S, loadState/snapshot/saveState
-  lines.js              buildLines, evaluate, heldReels, applySticky …
+  rng.js                Zufall, randomStops/nextStops (+ austauschbare Quellen für Tests)
+  state.js              gespeicherter Zustand S (inkl. Stopppositionen), loadState/snapshot/saveState
+  lines.js              buildLines, evaluate, heldReels …
   wheel-math.js         wheelIndexAt, wheelTarget
   progression.js        xpNeed
   runtime.js            rt – Laufzeit-Zustand des Spielablaufs (spinning, busy, gamble …), selectionLocked
@@ -55,9 +56,11 @@ js/game/                Spielablauf: flow.js (spin/settle, Auto), wheel-flow.js,
 js/ui/                  sync.js (Pult ↔ Zustand), bind.js (Ereignisse), controls.js (Linien/Einsatz),
                         input.js (Raycast, Hebel, Orbit), overlay.js (Linien-Overlay), paytable.js, debug.js
 tools/serve.mjs         statischer HTTP-Server (auch von den Browser-Tests benutzt)
+tools/strip-sim.mjs     Mathematik der Walzenstreifen (exakte Basisspiel-Auswertung, Monte Carlo der Freispiele)
+tools/calibrate-strips.mjs  Kalibrier-Skript (Kennzahlen, Vergleich mit dem früheren Modell, Streifensuche)
 tests/unit/             node:test, ohne Abhängigkeiten
-tests/e2e/              Playwright-Browser-Tests; screens/ enthält die Vergleichsbilder legacy ↔ neu
-legacy/                 ursprüngliche Ein-Datei-Version (Referenz für Gleichwertigkeitstests)
+tests/e2e/              Playwright-Browser-Tests; screens/ enthält die Referenzbilder des Regressionstests
+legacy/                 ursprüngliche Ein-Datei-Version (Referenz, unverändert)
 ```
 
 ### Zustand und Abhängigkeiten
@@ -75,22 +78,70 @@ legacy/                 ursprüngliche Ein-Datei-Version (Referenz für Gleichwe
   und `game/flow.js` ↔ `game/gamble.js` (`scheduleNext`). Beim Laden der Module wird davon nichts aufgerufen.
 - `core/*` ist mit `// @ts-check` und JSDoc typisiert (geprüft mit `tsc --allowJs --checkJs --strict --noEmit`).
 
+## Walzen und Spielmathematik
+
+Jede Walze trägt einen **festen Symbolstreifen** `REEL_STRIPS[c]` mit `STRIP_LEN = 16` Feldern (`js/core/strips.js`),
+jede Walze in einer anderen Reihenfolge. Der Zufall wählt pro drehender Walze nur eine **Stoppposition** p (gleichverteilt
+0..15); sichtbar sind die vier Felder p, p+1, p+2, p+3 (Reihe 0 oben, zyklisch). Symbole auf den Walzen werden nie
+ausgetauscht – die `sid` einer Kachel wird nur beim Aufbau gesetzt und ist danach schreibgeschützt. Das gilt auch in
+Freispielen (gehaltene Walzen stehen still, ihr Joker steht wirklich dort), bei Turbo, Quick-Stop und nach dem Neuladen.
+
+- Kachel k zeigt Streifenfeld (1 − k) mod 16; die Walzenstellung s gehört zur Stoppposition (−s) mod 16. Beim Drehen
+  wächst s, die Symbole laufen nach unten, von oben kommt das vorige Streifenfeld nach.
+- Die Animation (Anlauf, Lauf, Abbremsen mit easeOutBack, Nachfedern) plant im Lauf das Ziel: Die Laufgeschwindigkeit wird
+  um bis zu ±25 % angeglichen, damit das Abbremsen zur geplanten Zeit genau so beginnt, dass die Walze auf der
+  Ziel-Stoppposition landet. Passt kein Ziel in die Zeit, dreht die Walze etwas länger. Stopps bleiben gestaffelt
+  (links vor rechts), auch bei Quick-Stop und Spannung. Die Spannung (2 Bonus auf den linken Walzen → die restlichen
+  kriechen) wird beim Bremsbeginn geprüft, weil das Ziel dann feststeht. Mittlere Dauer eines Drehs (60 Bilder/s):
+  normal ≈ 3,4 s, mit Spannung ≈ 5,7 s, Turbo ≈ 2,7 s.
+- Gespeichert werden `S.stops` (Stopppositionen; während eines Drehs dessen Ziel) und `S.pending.stops`.
+  `S.matrix` wird daraus abgeleitet. Ältere Spielstände mit nur `matrix` laden ohne Fehler: Die Walzen starten auf
+  zufälligen Positionen, Klebe-Joker bleiben nur dort, wo wirklich ein Joker steht (`pruneSticky`).
+
+Aufbau der Streifen: Bonus auf Walze 1, 3, 5 (je einmal), Klee auf jeder Walze (je einmal), Diamant auf Walze 1, 3, 5,
+Joker auf Walze 2, 3, 4; die normalen Symbole 1–3× je Walze, kein Symbol zweimal im selben sichtbaren Fenster.
+Kennzahlen (10 Linien, `node tools/calibrate-strips.mjs`, Seed 1; Basisspiel exakt über alle 16⁵ Kombinationen):
+
+| Kennzahl | früher (Einzelsymbole) | feste Streifen |
+|---|---|---|
+| Quote ohne Jackpot | 88,1 % | 89,2 % (MC 2 Mio.) / 89,4 % (exakt + MC) |
+| davon Linien / Freispiele / Glücksrad | 67,5 / 11,1 / 9,4 % | 72,5 / 6,8 / 9,9 % |
+| Freispiel-Auslöser | 2,0 % | 1,5625 % (= 1/64, exakt) |
+| Glücksrad | 1,55 % | 1,5625 % (= 1/64, exakt) |
+| Trefferquote (inkl. Features) | 25,3 % | 25,0 % |
+| Standardabweichung je Dreh | 2,79× Einsatz | 2,79× Einsatz |
+| Jackpot (5× Diamant) | 1 von ≈ 74 000 | 1 von ≈ 52 000 |
+
+Dazu kommen 5 % jedes Einsatzes in den Jackpot-Topf. Mit nur 16 Feldern ist ein Bonus-Symbol auf einer Walze in
+4 von 16 Stopps sichtbar; mehr als drei Bonus-Walzen würden die Freispiele auf über 5 % treiben. Darum sind höchstens
+drei Bonus-Symbole sichtbar und es gibt je Auslösung 3 Freispiele (`FS_AWARD` für 4/5 Bonus bleibt als Regel bestehen).
+
 ## Tests
 
 ```sh
 npm test               # Unit-Tests (node --test tests/unit/*.test.mjs), keine Abhängigkeiten nötig
 npm install            # einmalig für die Browser-Tests: playwright + three@0.128.0 (nur devDependencies)
 npm run test:e2e       # Browser-Tests gegen index.html
-E2E_TARGET=beide npm run test:e2e   # dieselben Erwartungen zusätzlich gegen legacy/ (Gleichwertigkeit)
+node --test tests/e2e/strips.test.mjs   # einzelner Browser-Test
+UPDATE_SNAPSHOTS=1 node --test tests/e2e/screens.test.mjs   # Referenzbilder bewusst neu schreiben
+node tools/calibrate-strips.mjs          # Kennzahlen der Walzenstreifen (--legacy: früheres Modell, --search: Suche)
 ```
 
+`E2E_TARGET=legacy|beide` prüft zusätzlich die Ein-Datei-Referenz `legacy/` – **nur noch für Tests, die nicht von den
+Walzeninhalten abhängen** (derzeit die Gehäuse-Tests ohne den erzwungenen Mega Win). Walzenbezogene Tests
+(`targets({ reels: true })`: Self-Test, Freispiele, Neuladen, Auto-Stopp, Streifen) laufen nur gegen die neue Fassung,
+weil die Referenz jedes Feld einzeln zieht.
+
 - **Unit** (`tests/unit`): Linienaufbau (Paare, Reihen, Duplikate), Auswertung (Joker, Scatter, Jackpot,
-  3 Joker vs. 4 gleiche, nur 2 in Folge), `FS_AWARD`, `heldReels`/`applySticky`, `wheelIndexAt ∘ wheelTarget`,
-  `xpNeed`, Laden/Speichern, seed-feste Monte-Carlo-Prüfung der Linienquote (≈ 67 % aus Linien; zusammen mit
-  Freispielen und Glücksrad ≈ 92 %).
-- **E2E** (`tests/e2e`): Self-Test 18/18 und Dreh, Freispiele mit gehaltenen Walzen und Retrigger, Neuladen mitten
-  im Dreh / im Risiko / im Glücksrad, Auto + Turbo, Auto-Stopp bei Mega Win, Gehäusewahl, Glas-Innenleben,
-  Münzschale, Ansichten, sowie ein optischer Vergleich (`screens.test.mjs`, Bildpaare in `tests/e2e/screens/`).
+  3 Joker vs. 4 gleiche, nur 2 in Folge), `FS_AWARD`, `heldReels`, `wheelIndexAt ∘ wheelTarget`, `xpNeed`,
+  Laden/Speichern (Stopppositionen, alte Spielstände, `pruneSticky`), Walzenstreifen (Länge, verschieden, keine Klumpen,
+  `matrixFromStops`, `findStops`, Testszenarien erreichbar), gleichverteilte Stopps, exakte Basisspiel-Kennzahlen und
+  seed-feste Monte-Carlo-Quote inkl. Freispielen und Glücksrad (Ziel 88–90 %).
+- **E2E** (`tests/e2e`): Self-Test 20/20 und Dreh, Walzenstreifen-Invariante (`strips.test.mjs`: Kacheln = `REEL_STRIPS`
+  bei normal, Turbo, Quick-Stop, Freispielen und Neuladen; Matrix = Stopppositionen), Freispiele mit gehaltenen Walzen und
+  Retrigger, Neuladen mitten im Dreh / im Risiko / im Glücksrad, Auto + Turbo, Auto-Stopp bei Mega Win, Gehäusewahl,
+  Glas-Innenleben, Münzschale, Ansichten, sowie ein optischer Regressionstest (`screens.test.mjs`, Referenzbilder in
+  `tests/e2e/screens/`, neu schreiben nur mit `UPDATE_SNAPSHOTS=1`).
   Alle Tests prüfen, dass keine Konsolenfehler oder -warnungen auftreten (blockierte Fonts ausgenommen).
 - CDN-Anfragen an `cdn.jsdelivr.net/npm/three@0.128.0/…` werden in den Tests auf eine lokale Kopie umgeleitet,
   Google Fonts werden abgebrochen. Pfade lassen sich per Umgebungsvariable setzen:
@@ -101,6 +152,8 @@ E2E_TARGET=beide npm run test:e2e   # dieselben Erwartungen zusätzlich gegen le
 `window.__bandit` bietet die bisherigen Funktionen (`S`, `spin`, `evaluate`, `buildLines`, `readVisibleMatrix`,
 `runSelfTests`, `runWheel`, `offerGamble`, `gamblePick`, `gamble`, `busy`) und zusätzlich `rt`, `world`,
 Getter wie `spinning`, `autoOn`, `renderer`, `camera`, `coins`, `lever`, `lacquerMat`, die Sammlungen `reels`,
-`holdFrames`, `deck`, `mech`, `orbit`, sowie `setMatrixSource(fn)` / `setRandomSource(fn)` (mit `null` zurücksetzen)
-und `randomMatrix` (die ursprüngliche Zufallsmatrix). Der Debug-Dialog im Spiel zeigt die sichtbare Matrix,
+`holdFrames`, `deck`, `mech`, `orbit`, sowie für die Walzen `REEL_STRIPS`, `STRIP_LEN`, `readStops()`,
+`matrixFromStops(stops)`, `findStops(pred, { fixed })`, `randomStops()` und `setStopSource(fn)` / `setRandomSource(fn)`
+(mit `null` zurücksetzen). Tests erzwingen Ergebnisse, indem sie passende Stopppositionen auf den Streifen suchen –
+z. B. `setStopSource(() => findStops(m => …))`. Der Debug-Dialog im Spiel zeigt die sichtbare Matrix,
 Statistiken und den Self-Test.

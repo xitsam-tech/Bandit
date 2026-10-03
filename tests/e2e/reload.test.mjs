@@ -2,9 +2,9 @@
 // Läuft über http, damit localStorage das Neuladen übersteht.
 import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openGame, targets, selfTests } from './helpers.mjs';
+import { openGame, targets, selfTests, SELFTEST_OK } from './helpers.mjs';
 
-for (const [name, file] of targets()){
+for (const [name, file] of targets({ reels: true })){
   describe(`Neuladen & Buchungen (${name})`, { timeout: 240000 }, () => {
     let g;
     before(async () => {
@@ -14,16 +14,17 @@ for (const [name, file] of targets()){
     });
     after(() => g && g.close());
 
-    test('Neuladen mitten im Dreh: Runde wird ausgewertet, Matrix bleibt', async () => {
+    test('Neuladen mitten im Dreh: Runde wird ausgewertet, Stopps und Matrix bleiben', async () => {
       await g.page.click('#spinBtn'); await g.page.waitForTimeout(300);
-      const before = await g.page.evaluate(() => ({ c: __t.S.credits, m: JSON.stringify(__t.S.matrix), pend: !!__t.S.pending }));
+      const before = await g.page.evaluate(() => ({ c: __t.S.credits, m: JSON.stringify(__t.S.matrix), stops: JSON.stringify(__t.S.pending && __t.S.pending.stops), pend: !!__t.S.pending }));
       assert.equal(before.pend, true, 'Dreh ist als unterbrochen gespeichert');
       await g.reload(4500);
       await g.page.waitForFunction(() => !__t.spinning && !__t.busy, null, { timeout: 30000 });
       const after = await g.page.evaluate(() => ({ c: __t.S.credits, pend: __t.S.pending, spins: __t.S.stats.spins, hist: __t.S.history.length,
-        same: JSON.stringify(__bandit.readVisibleMatrix()), won: __t.S.stats.won }));
+        same: JSON.stringify(__bandit.readVisibleMatrix()), stops: JSON.stringify(__t.readStops()), won: __t.S.stats.won }));
       assert.equal(after.pend, null);
       assert.equal(after.same, before.m, 'Matrix nach dem Neuladen unverändert');
+      assert.equal(after.stops, before.stops, 'Walzen stehen auf den Ziel-Stopps des unterbrochenen Drehs');
       assert.equal(after.spins, 1); assert.equal(after.hist, 1);
       assert.ok(Math.abs(after.c - (before.c + after.won)) < 1e-6, 'Gewinn genau einmal gutgeschrieben');
     });
@@ -78,7 +79,7 @@ for (const [name, file] of targets()){
         match: JSON.stringify(__bandit.readVisibleMatrix()) === JSON.stringify(__t.S.matrix) }));
       assert.ok(r.spins >= 3, 'Auto hat gedreht: ' + r.spins);
       assert.equal(r.autoOn, false);
-      if (r.fs === 0){ assert.equal(r.match, true); assert.equal(await selfTests(g.page), '18/18 bestanden'); }
+      if (r.fs === 0){ assert.equal(r.match, true); assert.equal(await selfTests(g.page), SELFTEST_OK); }
     });
 
     test('keine Konsolenfehler', () => { assert.deepEqual(g.errors, []); });

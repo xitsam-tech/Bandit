@@ -1,9 +1,10 @@
 /** Einstieg: Zustand laden, Szene aufbauen, UI binden, Render-Schleife starten. */
 import { WHEEL_MIN } from './core/config.js';
 import { buildLines, evaluate } from './core/lines.js';
-import { defaultRandomMatrix, randomMatrix, setMatrixSource, setRandomSource } from './core/rng.js';
+import { randomStops, setRandomSource, setStopSource } from './core/rng.js';
 import { rt } from './core/runtime.js';
-import { S, loadState, saveState, snapshot } from './core/state.js';
+import { S, loadState, pruneSticky, saveState, setStops, snapshot } from './core/state.js';
+import { REEL_STRIPS, STRIP_LEN, findStops, matrixFromStops, validStops } from './core/strips.js';
 import { fmt } from './core/util.js';
 import { $, stage } from './dom.js';
 import { settle, spin } from './game/flow.js';
@@ -19,7 +20,7 @@ import { canvasTex, circleTex } from './scene/helpers.js';
 import { updateLamps } from './scene/lamps.js';
 import { deck } from './scene/lower-cabinet.js';
 import { mech } from './scene/mechanics.js';
-import { readVisibleMatrix, showMatrixOnReels } from './scene/reels.js';
+import { readStops, readVisibleMatrix, showStopsOnReels } from './scene/reels.js';
 import { initGL } from './scene/renderer.js';
 import { buildSticky, updateSticky } from './scene/sticky.js';
 import { applyBrightness, applyCabinetStyle } from './scene/styles.js';
@@ -35,12 +36,14 @@ import { syncUI } from './ui/sync.js';
    ========================================================= */
 function start(hotData){
   loadState(hotData || {});
+  // Kein oder alter Spielstand (nur Matrix): zufällige Startpositionen; Klebe-Joker nur, wo wirklich ein Joker steht
+  if (!validStops(S.stops)){ setStops(randomStops()); pruneSticky(); }
+  if (S.pending && !validStops(S.pending.stops)) S.pending.stops = /** @type {number[]} */ (S.stops).slice();
   buildSymbolCanvases();
   rt.glOK = initGL();
   if (rt.glOK){
     SYM.forEach(o => { o.tex = canvasTex(o.canvas); o.tex.anisotropy = 8; });
-    if (!S.matrix) S.matrix = randomMatrix();
-    showMatrixOnReels(S.matrix);
+    showStopsOnReels(S.stops);
     buildSticky(); updateSticky();
     applyCabinetStyle(S.cabinet);
     applyBrightness();
@@ -88,7 +91,8 @@ function start(hotData){
     get coins(){ return world.coins; }, get lever(){ return world.lever; }, get lacquerMat(){ return world.lacquerMat; }, get bokeh(){ return world.bokeh; },
     reels, holdFrames, stickyMeshes, lamps, deck, mech, orbit, stage, raycaster, ndc, Ticker, LCD,
     updateSticky, applyCabinetStyle, gambleCollect,
-    randomMatrix: defaultRandomMatrix, setMatrixSource, setRandomSource
+    // Walzenstreifen und Stopppositionen (Tests: setStopSource(() => stops) erzwingt den nächsten Dreh, null = Zufall)
+    REEL_STRIPS, STRIP_LEN, readStops, matrixFromStops, findStops, randomStops, setStopSource, setRandomSource
   };
   loop();
 }

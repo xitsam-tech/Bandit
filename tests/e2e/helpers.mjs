@@ -27,14 +27,16 @@ const CHROMIUM = firstExisting([process.env.CHROMIUM_PATH, '/opt/pw-browsers/chr
 export const FILES = { neu: 'index.html', legacy: 'legacy/einarmiger-bandit-3d.html' };
 /**
  * Welche Fassung(en) getestet werden: E2E_TARGET=neu (Standard) | legacy | beide.
- * „legacy“ prüft dieselben Erwartungen gegen die Ein-Datei-Referenz (Gleichwertigkeit).
+ * „legacy“ prüft dieselben Erwartungen gegen die Ein-Datei-Referenz (Gleichwertigkeit) – aber nur für Tests, die
+ * nicht von den Walzeninhalten abhängen: Die neue Fassung hat feste Walzenstreifen, die Referenz zieht jedes Feld einzeln.
+ * @param {{ reels?: boolean }} [opts]  reels: Test hängt von Walzeninhalten/Stopppositionen ab → nur die neue Fassung
  * @returns {[string, string][]} Paare [Name, Datei]
  */
-export function targets(){
+export function targets({ reels = false } = {}){
   const t = process.env.E2E_TARGET || 'neu';
-  if (t === 'beide') return Object.entries(FILES);
-  if (!FILES[t]) throw new Error('E2E_TARGET unbekannt: ' + t);
-  return [[t, FILES[t]]];
+  if (!(t === 'beide' || FILES[t])) throw new Error('E2E_TARGET unbekannt: ' + t);
+  const list = t === 'beide' ? Object.entries(FILES) : [[t, FILES[t]]];
+  return reels ? list.filter(([n]) => n === 'neu') : list;
 }
 
 // Einheitlicher Testzugang `window.__t` für beide Fassungen: die Modulversion liefert alles über __bandit,
@@ -45,13 +47,13 @@ const ADAPTER = `Object.defineProperty(window, '__t', { configurable: true, get(
     t = { legacy:false, b, S:b.S, get spinning(){ return b.rt.spinning; }, get busy(){ return b.rt.busy; }, get autoOn(){ return b.rt.autoOn; },
       get gamble(){ return b.rt.gamble; }, reels:b.reels, holdFrames:b.holdFrames, orbit:b.orbit, mech:b.mech,
       get coins(){ return b.coins; }, get lacquerMat(){ return b.lacquerMat; }, updateSticky:b.updateSticky,
-      defaultMatrix:b.randomMatrix, setMatrix: fn => b.setMatrixSource(fn), clearAuto: () => clearTimeout(b.rt.autoTimer), get camera(){ return b.camera; } };
+      setStops: fn => b.setStopSource(fn), findStops: b.findStops, readStops: b.readStops, strips: b.REEL_STRIPS,
+      clearAuto: () => clearTimeout(b.rt.autoTimer), get camera(){ return b.camera; } };
   } else {
-    const orig = window.randomMatrix;
     t = { legacy:true, b, S:b.S, get spinning(){ return spinning; }, get busy(){ return b.busy; }, get autoOn(){ return autoOn; },
       get gamble(){ return b.gamble; }, reels, holdFrames, orbit, mech,
       get coins(){ return coins; }, get lacquerMat(){ return lacquerMat; }, updateSticky,
-      defaultMatrix: orig, setMatrix: fn => { window.randomMatrix = fn || orig; }, clearAuto: () => clearTimeout(autoTimer), get camera(){ return camera; } };
+      clearAuto: () => clearTimeout(autoTimer), get camera(){ return camera; } };
   }
   Object.defineProperty(window, '__t', { value: t, configurable: true });
   return t;
@@ -93,6 +95,9 @@ export async function openGame({ file = 'index.html', viewport = { width: 1440, 
     async close(){ await browser.close(); await srv.close(); }
   };
 }
+
+/** Anzahl der Self-Tests im Spiel (bei ruhenden Walzen). */
+export const SELFTEST_OK = '20/20 bestanden';
 
 /** Self-Tests im Debug-Dialog ausführen und die Ergebniszeile liefern. */
 export function selfTests(page){

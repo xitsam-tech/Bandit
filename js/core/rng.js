@@ -1,13 +1,16 @@
 // @ts-check
-/** Zufall: kryptografischer Zufall, gewichtete Symbolwahl, Zufallsmatrix. Für Tests sind Zufallsquelle und Matrix-Lieferant austauschbar. */
-import { COLS, ROWS, WEIGHTS } from './config.js';
-
-/** @typedef {number[][]} Matrix  4×5, Werte = Symbol-Index */
+/**
+ * Zufall: kryptografischer Zufall und Stopppositionen der Walzen.
+ * Der Zufall wählt pro Walze nur eine Stoppposition auf ihrem festen Streifen (gleichverteilt).
+ * Für Tests sind Zufallsquelle und Stopp-Lieferant austauschbar.
+ */
+import { COLS } from './config.js';
+import { STRIP_LEN, validStops } from './strips.js';
 
 /** @type {null | (() => number)} Testzugang: ersetzt die Zufallsquelle (z. B. seed-fester Generator). */
 let source = null;
-/** @type {null | (() => Matrix)} Testzugang: ersetzt den Matrix-Lieferanten (alle Aufrufe von randomMatrix). */
-let matrixSource = null;
+/** @type {null | (() => number[])} Testzugang: liefert die Stopppositionen des nächsten Drehs. */
+let stopSource = null;
 
 /** Gleichverteilte Zufallszahl in [0, 1). */
 export function rand(){
@@ -15,26 +18,24 @@ export function rand(){
   try { const u = new Uint32Array(1); crypto.getRandomValues(u); return u[0] / 4294967296; }
   catch(e){ return Math.random(); }
 }
-const W_TOTAL = WEIGHTS.reduce((a, b) => a + b, 0);
-/** Ein Symbol gemäß WEIGHTS ziehen. @returns {number} */
-export function sampleSymbol(){
-  let r = rand() * W_TOTAL;
-  for (let i = 0; i < WEIGHTS.length; i++){ r -= WEIGHTS[i]; if (r < 0) return i; }
-  return 0;
+/** Zufällige Stopppositionen (je Walze gleichverteilt 0..STRIP_LEN-1). @param {() => number} [rnd] @returns {number[]} */
+export function randomStops(rnd = rand){
+  return Array.from({ length: COLS }, () => Math.floor(rnd() * STRIP_LEN));
 }
-/** Neue Zufallsmatrix nach WEIGHTS (ignoriert einen gesetzten Matrix-Lieferanten). @returns {Matrix} */
-export function defaultRandomMatrix(){
-  return Array.from({ length: ROWS }, () => Array.from({ length: COLS }, sampleSymbol));
-}
-/** Matrix für einen Dreh: der gesetzte Lieferant (Tests) oder defaultRandomMatrix(). @returns {Matrix} */
-export function randomMatrix(){
-  return matrixSource ? matrixSource() : defaultRandomMatrix();
+/** Stopppositionen für einen Dreh: der gesetzte Lieferant (Tests) oder randomStops(). @returns {number[]} */
+export function nextStops(){
+  if (stopSource){
+    const s = stopSource();
+    if (validStops(s)) return s.slice();
+    console.warn('Stopp-Lieferant: ungültige Stopppositionen', s);
+  }
+  return randomStops();
 }
 
 /** Zufallsquelle ersetzen (`null` = wieder kryptografischer Zufall). @param {null | (() => number)} fn */
 export function setRandomSource(fn){ source = fn; }
-/** Matrix-Lieferanten ersetzen (`null` = wieder Zufall). @param {null | (() => Matrix)} fn */
-export function setMatrixSource(fn){ matrixSource = fn; }
+/** Stopp-Lieferanten ersetzen (`null` = wieder Zufall). @param {null | (() => number[])} fn */
+export function setStopSource(fn){ stopSource = fn; }
 
 /**
  * Seed-fester Generator (mulberry32) für reproduzierbare Tests.

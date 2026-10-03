@@ -1,7 +1,7 @@
 // Regeln/Konfiguration: Freispiele, Glücksrad, Level, Tabellen.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FS_AWARD, WEIGHTS, PAY, SYMBOLS, WHEEL, BET_STEPS } from '../../js/core/config.js';
+import { FS_AWARD, PAY, SYMBOLS, WHEEL, BET_STEPS } from '../../js/core/config.js';
 import { wheelIndexAt, wheelTarget } from '../../js/core/wheel-math.js';
 import { xpNeed } from '../../js/core/progression.js';
 
@@ -32,9 +32,7 @@ test('xpNeed: Werte und strenge Monotonie', () => {
 });
 
 test('Tabellen decken alle Symbole ab und sind unverändert', () => {
-  assert.equal(WEIGHTS.length, SYMBOLS.length);
   assert.equal(PAY.length, SYMBOLS.length);
-  assert.deepEqual(WEIGHTS, [16, 16, 13, 13, 10, 8, 6, 3, 3, 4, 3, 2, 5]);
   assert.deepEqual(WHEEL, [3, 5, 3, 8, 3, 5, 3, 15, 3, 5, 3, 8, 3, 5, 25, 4]);
   assert.deepEqual(BET_STEPS, [0.1, 0.2, 0.5, 1, 2, 5]);
   assert.ok(PAY.every(p => p.length === 3));
