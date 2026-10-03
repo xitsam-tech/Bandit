@@ -9,10 +9,13 @@ import { drawSymbolArt } from '../gfx/symbols.js';
 import { pickables, world } from './context.js';
 import { canvasTex, frameMesh, rrShape } from './helpers.js';
 import { CAB_STYLES } from './styles.js';
+import { buildMouth, buildTray, updateMouth } from './tray.js';
 
 /* ----- Unterbau nach Vorbild echter Geräte: schräges Tasten-Deck, Belly-Glass, Sockel ----- */
 export const deck = { buttons:[], group:null };
-export const TRAY = { x0:-1.7, x1:1.7, z0:0.42, z1:1.75, floor:-5.2 };
+/** Münzschale: Innenmaße der Mulde (Rand vorne `top`, hinten `back`), Eckradius, Bodenrundung, Mattenstärke. */
+export const TRAY = { x0:-1.7, x1:1.7, z0:0.42, z1:1.75, floor:-5.2, top:-4.94, back:-5.13, r:0.24, fillet:0.08, mat:0.015 };
+let mouth = null;
 const DECK_BTNS = [
   { id:'auto',  label:'AUTO',    x:-3.0,  r:0.25, col:0x2f6bff },
   { id:'down',  label:'−',       x:-2.3,  r:0.22, col:0x8c7cff },
@@ -90,14 +93,10 @@ export function buildLowerCabinet(lacquer, chrome, gold, dark){
   const rejectBtn = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.05, 20), new THREE.MeshStandardMaterial({ color:0xb0242c, roughness:0.35 }));
   rejectBtn.rotation.x = Math.PI / 2; rejectBtn.position.set(3.55, 1.95, 0.44); world.scene.add(rejectBtn);
   // Auswurföffnung und verchromte Münzschale vorne unten
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.2, 0.02), dark); mouth.position.set(0, -5.02, 0.37); world.scene.add(mouth);
+  const hole = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.2, 0.02), dark); hole.position.set(0, -5.02, 0.37); world.scene.add(hole);
   const mouthF = frameMesh(1.66, 0.36, 1.5, 0.2, 0.06, 0.04, chrome); mouthF.position.set(0, -5.02, 0.35); world.scene.add(mouthF);
-  const T = TRAY;
-  const trayBase = new THREE.Mesh(new THREE.BoxGeometry(T.x1 - T.x0, 0.04, T.z1 - T.z0), chrome); trayBase.position.set(0, T.floor - 0.02, (T.z0 + T.z1) / 2); world.scene.add(trayBase);
-  const trayLip = new THREE.Mesh(new THREE.BoxGeometry(T.x1 - T.x0 + 0.04, 0.22, 0.04), chrome); trayLip.position.set(0, T.floor + 0.09, T.z1); world.scene.add(trayLip);
-  [T.x0, T.x1].forEach(x => { const sd = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.22, T.z1 - T.z0), chrome); sd.position.set(x, T.floor + 0.09, (T.z0 + T.z1) / 2); world.scene.add(sd); });
-  const trayIn = new THREE.Mesh(new THREE.BoxGeometry(T.x1 - T.x0 - 0.06, 0.005, T.z1 - T.z0 - 0.06), new THREE.MeshStandardMaterial({ color:0x15151a, roughness:0.7 }));
-  trayIn.position.set(0, T.floor + 0.003, (T.z0 + T.z1) / 2); world.scene.add(trayIn);
+  buildTray(TRAY, chrome);
+  mouth = buildMouth(0, -5.02, 0.37, 1.5, chrome);
 
   // Sockel mit Schattenfuge und Goldleiste
   const plinth = new THREE.Mesh(new THREE.BoxGeometry(7.8, 0.36, 4.6), dark); plinth.position.set(0, -5.43, -1.9); world.scene.add(plinth);
@@ -107,6 +106,7 @@ export function buildLowerCabinet(lacquer, chrome, gold, dark){
 }
 export function updateDeck(t, dt){
   if (!deck.group) return;
+  updateMouth(mouth, dt);
   const canSpin = !$('spinBtn').disabled, gOpen = rt.gamble && !rt.gamble.busy, lock = selectionLocked();
   const pulse = 0.5 + 0.5 * Math.sin(t / 220);
   deck.buttons.forEach(b => {
