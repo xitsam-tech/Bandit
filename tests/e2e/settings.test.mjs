@@ -9,7 +9,10 @@ import { clickSetting, openGame, targets } from './helpers.mjs';
 const setRange = (page, sel, v) => page.evaluate(([sel, v]) => { const el = document.querySelector(sel); el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); }, [sel, String(v)]);
 
 const OVERLAY_PIXELS = () => {
-  const c = document.getElementById('fx'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+  // auf eine frische Leinwand kopieren (sonst warnt Chromium bei mehrfachem Auslesen des Overlay-Kontexts)
+  const src = document.getElementById('fx'), c = document.createElement('canvas'); c.width = src.width; c.height = src.height;
+  const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(src, 0, 0);
+  const d = x.getImageData(0, 0, c.width, c.height).data;
   let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 8) n++;
   return n;
 };

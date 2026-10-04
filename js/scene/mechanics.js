@@ -48,7 +48,8 @@ export function buildMechanics(){
   const { XP, PY, PZ, PZF, RAIL_T, RAIL_B, RB_Y, k } = FRAME, WX = WALL_X - 0.02;
 
   /* ----- Walzenrahmen: Seitenplatten mit Erleichterungslöchern, Traversen, Distanzstücke zu den Gehäusewänden ----- */
-  const plate = new THREE.Shape(); plate.moveTo(-PZF, -PY); plate.lineTo(PZ, -PY); plate.lineTo(PZ, PY); plate.lineTo(-PZF, PY); plate.closePath();
+  // Umriss (Platten-x = −z): unten hinten abgeschrägt, weil das Unterteil 0,2 weniger tief ist als das Oberteil
+  const plate = new THREE.Shape(); plate.moveTo(-PZF, -PY); plate.lineTo(PZ - 0.2, -PY); plate.lineTo(PZ, -PY + 0.2); plate.lineTo(PZ, PY); plate.lineTo(-PZF, PY); plate.closePath();
   [[-1.1, 1.25], [1.1, 1.25], [-1.1, -1.25], [1.1, -1.25]].forEach(([a, c]) => { const h = new THREE.Path(); h.absarc(a * k, c * k, 0.5 * k, 0, Math.PI * 2, true); plate.holes.push(h); });
   const plateGeo = new THREE.ExtrudeGeometry(plate, { depth:0.04, bevelEnabled:false, curveSegments:24 });
   [-XP, XP].forEach(x => {

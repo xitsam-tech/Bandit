@@ -36,7 +36,7 @@ export function buildHarness(){
   /* ----- Flachbandkabel: Anzeigen und Tasten über die linke Wand nach hinten, Lampentreiber, Laufschrift ----- */
   const rw = id => { const p = wiring.ports.get(id).plug; return Math.max(p.w, p.d) - 0.05; };
   const lc = port('mb.lcd'), bt = port('mb.buttons'), lp = port('mb.lamps'), tk = port('mb.ticker');
-  cable('lcd', 'lcd.in', 'mb.lcd', [V(1.5, -2.62, -0.25), V(-3.9, -2.62, -0.25), V(-3.9, -2.62, -0.45), V(-3.9, -3.3, -0.6), V(-3.9, -3.3, lc.z), V(lc.x - 0.3, over + 0.02, lc.z), V(lc.x, over + 0.02, lc.z)],
+  cable('lcd', 'lcd.in', 'mb.lcd', [V(1.5, -2.62, -0.25), V(-3.7, -2.62, -0.25), V(-3.72, -2.62, -0.55), V(-3.9, -3.3, -0.7), V(-3.9, -3.3, lc.z), V(lc.x - 0.3, over + 0.02, lc.z), V(lc.x, over + 0.02, lc.z)],
     { ribbon:rw('lcd.in'), normal:V(1, 0, 0), normal0:V(0, 1, 0), bend:0.1, lead:0.06 });
   const bbP = port('bb.bus');
   cable('tasten', 'bb.bus', 'mb.buttons', [V(bbP.x, -3.42, 0.32), V(-3.92, -3.42, 0.2), V(-3.93, -3.42, -0.1), V(-3.93, -3.42, bt.z), V(bt.x - 0.3, over, bt.z), V(bt.x, over, bt.z)],
