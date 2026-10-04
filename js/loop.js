@@ -2,13 +2,13 @@
 import { rt } from './core/runtime.js';
 import { S } from './core/state.js';
 import { clamp, mod, now } from './core/util.js';
-import { REDUCED } from './dom.js';
+import { reducedMotion } from './dom.js';
 import { updatePresentation } from './game/presentation.js';
 import { Ticker } from './gfx/ticker.js';
 import { orbit, pointer } from './scene/camera.js';
 import { updateCard } from './scene/card.js';
 import { updateCoins } from './scene/coins.js';
-import { VIEW } from './scene/constants.js';
+import { CAB_MID_Z, VIEW } from './scene/constants.js';
 import { lamps, world } from './scene/context.js';
 import { updateLever } from './scene/lever.js';
 import { updateDeck } from './scene/lower-cabinet.js';
@@ -23,6 +23,8 @@ let lastT = now(), bulbColor = window.THREE ? new THREE.Color() : null, _bulbTmp
 const camTarget = window.THREE ? { pos:new THREE.Vector3(), look:new THREE.Vector3() } : null;
 const camState = window.THREE ? { pos:new THREE.Vector3(), look:new THREE.Vector3(), init:false, sph:null } : null;
 const _camPivot = window.THREE ? new THREE.Vector3() : null, _tSph = {};
+/** Seitlich wächst der Kameraabstand (tiefes Gehäuse und Hebel müssen ins Bild). */
+const SIDE_GROW = 0.36;
 export function loop(){
   requestAnimationFrame(loop);
   const t = now(), dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
@@ -40,7 +42,7 @@ export function loop(){
   if (world.dimPlane){ world.dimPlane.material.opacity = dimTarget; world.dimPlane.visible = dimTarget > 0.01; }
 
   // Kamera-Rig: Parallaxe im Leerlauf, Fahrt zum Glücksrad / zur Karte, Orbit beim großen Gewinn
-  const sway = REDUCED ? 0 : 1;
+  const REDUCED = reducedMotion(), sway = REDUCED ? 0 : 1;
   pointer.x += (pointer.tx - pointer.x) * Math.min(1, dt * 3);
   pointer.y += (pointer.ty - pointer.y) * Math.min(1, dt * 3);
   const dist = world.camera.userData.dist || 16, tt0 = t / 1000;
@@ -49,8 +51,8 @@ export function loop(){
   if (wheelOn){ camTarget.pos.set(0, 0.7, Math.max(dist * 0.62, 7.5)); camTarget.look.set(0, 0.45, 1.3); }
   else if (rt.gamble){ camTarget.pos.set(0.35 * sway + pointer.x * 0.4 * sway, 0.6, dist * 0.74); camTarget.look.set(0, 0.25, 1.2); }
   else if (celebrating && !REDUCED){
-    const ang = orbit.yaw + Math.sin(tt0 * 0.55) * 0.3, r = (dist + 1.2) * 0.93;
-    camTarget.pos.set(VIEW.cx + Math.sin(ang) * r, VIEW.cy + 0.9, -1.2 + Math.cos(ang) * r); camTarget.look.set(VIEW.cx, VIEW.cy - 0.1, -1.2);
+    const ang = orbit.yaw + Math.sin(tt0 * 0.55) * 0.3, r = (dist - CAB_MID_Z - 0.8) * 0.93;
+    camTarget.pos.set(VIEW.cx + Math.sin(ang) * r, VIEW.cy + 0.9, CAB_MID_Z + 0.8 + Math.cos(ang) * r); camTarget.look.set(VIEW.cx, VIEW.cy - 0.1, CAB_MID_Z + 0.8);
   } else {
     // Vitrinen-Modus: nach 30 s ohne Eingabe schwenkt die Kamera langsam um den Automaten
     const idle = !REDUCED && !rt.spinning && !rt.busy && !rt.gamble && t - orbit.lastInput > 30000;
@@ -58,15 +60,15 @@ export function loop(){
     // Drehteller: Automat rotiert langsam um die eigene Achse (Ziehen übersteuert)
     if (S.view === 'turn' && !orbit.drag && !REDUCED) orbit.yaw += dt * 0.35;
     const yaw = orbit.yaw + swing + pointer.x * 0.05 * sway, pitch = orbit.pitch - pointer.y * 0.03 * sway;
-    // Drehpunkt = Gehäusemitte (in der Tiefe); Abstand wächst seitlich, weil dann Gehäusetiefe und Hebel ins Bild müssen
-    const PZ = -2.0, r = (dist + 2.0) * orbit.zoom * (1 + Math.abs(Math.sin(yaw)) * 0.28);
+    // Drehpunkt = Gehäusemitte (in der Tiefe), frontal gleicher Abstand zur Front wie bisher; Abstand wächst seitlich, weil dann Gehäusetiefe und Hebel ins Bild müssen
+    const PZ = CAB_MID_Z, r = (dist - PZ) * orbit.zoom * (1 + Math.abs(Math.sin(yaw)) * SIDE_GROW);
     camTarget.look.set(VIEW.cx, VIEW.cy - 0.05, PZ);
     camTarget.pos.set(VIEW.cx + Math.sin(yaw) * Math.cos(pitch) * r, VIEW.cy - 0.05 + Math.sin(pitch) * r, PZ + Math.cos(yaw) * Math.cos(pitch) * r);
   }
   if (!camState.init){ camState.look.copy(camTarget.look); camState.init = true; }
   const k = Math.min(1, dt * (REDUCED || orbit.drag || orbit.pinch ? 10 : 2.4));
   // Kamera fährt auf einer Kugelbahn um die Gehäusemitte statt auf gerader Linie (sonst durch das Gehäuse hindurch)
-  const P = _camPivot.set(VIEW.cx, VIEW.cy - 0.05, -2.0);
+  const P = _camPivot.set(VIEW.cx, VIEW.cy - 0.05, CAB_MID_Z);
   const toSph = (v, out) => { const dx = v.x - P.x, dy = v.y - P.y, dz = v.z - P.z, r = Math.hypot(dx, dy, dz);
     out.r = r; out.yaw = Math.atan2(dx, dz); out.pitch = Math.asin(clamp(dy / r, -1, 1)); return out; };
   const ts = toSph(camTarget.pos, _tSph);

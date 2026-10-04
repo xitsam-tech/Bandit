@@ -2,6 +2,7 @@
 import { S } from '../core/state.js';
 import { LCD, drawLCD } from '../gfx/lcd.js';
 import { Ticker } from '../gfx/ticker.js';
+import { CAB_DEPTH, FRONT_Z, R } from './constants.js';
 import { world } from './context.js';
 import { archShape, canvasTex, frameMesh, neonTube, rrShape } from './helpers.js';
 import { buildLowerCabinet } from './lower-cabinet.js';
@@ -18,13 +19,14 @@ export function buildCabinet(){
   // Korpus mit Walzenfenster als Durchbruch
   const bodyShape = rrShape(8.1, 6.4, 0.45, 0, 0.1);
   bodyShape.holes.push(rrShape(5.9, 3.5, 0.18, 0, 0, THREE.Path));
-  const depth = 4.6;
+  // Tiefe aus dem Walzenradius: Walzen (Durchmesser 2R) passen mit Front und Wandstärke hinein
+  const depth = CAB_DEPTH;
   const body = new THREE.Mesh(new THREE.ExtrudeGeometry(bodyShape, { depth, bevelEnabled:true, bevelThickness:0.08, bevelSize:0.08, bevelSegments:4, curveSegments:14 }), lacquer);
-  body.position.z = 0.3 - depth; world.scene.add(body);
+  body.position.z = FRONT_Z - depth; world.scene.add(body);
   // Rückdeckel: das Walzenfenster ist ein Durchbruch durchs Gehäuse – hinten verschließen (gleiches Material, bei Glas durchsichtig)
-  const backCap = new THREE.Mesh(new THREE.PlaneGeometry(6.0, 3.6), lacquer); backCap.rotation.y = Math.PI; backCap.position.z = 0.3 - depth - 0.04; world.scene.add(backCap);
+  const backCap = new THREE.Mesh(new THREE.PlaneGeometry(6.0, 3.6), lacquer); backCap.rotation.y = Math.PI; backCap.position.z = FRONT_Z - depth - 0.04; world.scene.add(backCap);
 
-  const back = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 3.8), dark); back.position.z = -2.6; world.scene.add(back); mech.backPlate = back;
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 3.8), dark); back.position.z = -R - 0.5;   // dunkle Blende hinter der Walzenachse world.scene.add(back); mech.backPlate = back;
 
   // Chromrahmen ums Fenster
   const bezel = frameMesh(6.35, 3.95, 5.9, 3.5, 0.32, 0.1, chrome); bezel.position.z = 0.33; world.scene.add(bezel);

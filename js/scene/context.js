@@ -29,6 +29,8 @@ export const world = {
   belly: null,
   bulbHalo: null,
   bulbV: null,
+  mirror: null,
+  floor: null,
 };
 
 /** Walzen, Klickziele, Leuchtknöpfe, Gewinnrahmen (werden beim Aufbau befüllt). */

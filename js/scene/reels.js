@@ -47,7 +47,7 @@ export function buildReels(){
   for (let c = 0; c < COLS; c++){
     const group = new THREE.Group();
     group.position.set(reelX(c), 0, -R);
-    const core = new THREE.Mesh(new THREE.CylinderGeometry(R - 0.06, R - 0.06, CELL_W - 0.02, 32, 1, true), coreMat);
+    const core = new THREE.Mesh(new THREE.CylinderGeometry(R - 0.06, R - 0.06, CELL_W - 0.02, 2 * N, 1, true), coreMat);
     core.rotation.z = Math.PI / 2; group.add(core);
     [-1, 1].forEach(sd => { const rim = new THREE.Mesh(new THREE.TorusGeometry(R + 0.01, 0.026, 10, 96), rimMat); rim.rotation.y = Math.PI / 2; rim.position.x = sd * CELL_W / 2; group.add(rim); });
     const blurU = { value:0 }, slots = [];

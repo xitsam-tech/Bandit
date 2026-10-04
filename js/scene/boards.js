@@ -17,7 +17,7 @@ function straight(B, as, bs, skip = []){
 /** Pin per kurzer Bahn auf ein Via führen (Lagenwechsel). */
 function toVia(B, p, dx, dz){ B.via(p.x + dx, p.z + dz); B.trace([[p.x, p.z], [p.x + dx, p.z + dz]], 0.011); }
 
-/** Hauptplatine (6,4 × 1,6) über den Walzen; Steckerleisten für alle Baugruppen. */
+/** Hauptplatine (6,4 × 1,6) hinten im Unterteil, unter den Walzen; Steckerleisten für alle Baugruppen. */
 export function mainBoard(){
   const B = makeBoard({ w:6.4, d:1.6, ppu:160 });
   B.pour(-3.16, -0.76, 3.16, 0.76);
@@ -174,16 +174,16 @@ export function buttonBoard(xs){
   return B.build();
 }
 
-/** Walzenplatine über dem Walzenband: Motor-, Lichtschranken- und LED-Anschluss, Stecker zur Hauptplatine. */
+/** Walzenplatine unter dem Walzenband: Motor-, Lichtschranken- und LED-Anschluss (oben, zu den Bauteilen darüber), Stecker zur Hauptplatine. */
 export function reelBoard(){
   const B = makeBoard({ w:1.12, d:0.24, ppu:320 });
   const P = 'Walzenplatine';
   B.pour(-0.54, -0.1, 0.54, 0.1);
   B.hole(-0.48, 0, 0.03); B.hole(0.42, -0.07, 0.025);
   const j = B.header('J1', 0, 0, 6, { port:'top', part:P });
-  const m = B.header('M', 0.54, -0.06, 4, { axis:'z', port:'motor', part:P, bottom:true });
-  const o = B.header('O', 0.54, 0.075, 3, { axis:'z', port:'opto', part:P, bottom:true });
-  const l = B.header('L', -0.54, 0, 2, { axis:'z', port:'led', part:P, bottom:true });
+  const m = B.header('M', 0.54, -0.06, 4, { axis:'z', port:'motor', part:P });
+  const o = B.header('O', 0.54, 0.075, 3, { axis:'z', port:'opto', part:P });
+  const l = B.header('L', -0.54, 0, 2, { axis:'z', port:'led', part:P });
   B.bus(m.pins.slice(0, 2).reverse(), j.pins.slice(4, 6).reverse(), { da:[-1, 0], e0:0.05, step:0.04 });
   B.route(o.pins[1], j.pins[3], { da:[-1, 0], ea:0.05 });
   B.route(l.pins[0], j.pins[0], { da:[1, 0], ea:0.06 });

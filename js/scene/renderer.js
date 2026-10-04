@@ -1,10 +1,11 @@
 /** Renderer, Szene, Kamera, Licht, Nachbearbeitung (Bloom) und Raum/Boden. */
-import { $, REDUCED } from '../dom.js';
+import { $, reducedMotion } from '../dom.js';
 import { buildBulbs } from './bulbs.js';
 import { buildCabinet } from './cabinet.js';
 import { buildCard } from './card.js';
 import { buildCoins } from './coins.js';
 import { world } from './context.js';
+import { CAB_DEPTH, CAB_MID_Z } from './constants.js';
 import { buildLamps } from './lamps.js';
 import { buildLever } from './lever.js';
 import { buildSweeps } from './lights.js';
@@ -82,18 +83,27 @@ function buildBackdrop(){
   // keine bunten Lichtflecken mehr: ruhiger, neutraler Raum (Gruppe bleibt als leerer Platzhalter)
   world.bokeh = new THREE.Group(); world.scene.add(world.bokeh);
 
-  const useMirror = THREE.Reflector && !REDUCED && window.innerWidth > 700;
-  if (useMirror){
+  // Spiegelboden (nur auf breiten Bildschirmen); bei reduzierter Bewegung ausgeblendet – zur Laufzeit umschaltbar
+  if (THREE.Reflector && window.innerWidth > 700){
     const mirror = new THREE.Reflector(new THREE.CircleGeometry(33, 64), { textureWidth:768, textureHeight:384, color:0x2e2e30 });
-    mirror.rotation.x = -Math.PI / 2; mirror.position.set(0, -5.62, -4); world.scene.add(mirror);
+    mirror.rotation.x = -Math.PI / 2; mirror.position.set(0, -5.62, -4); world.scene.add(mirror); world.mirror = mirror;
   }
   const floor = new THREE.Mesh(new THREE.CircleGeometry(33.5, 64), new THREE.MeshStandardMaterial({
-    color:0x080808, roughness:0.8, metalness:0.1, envMapIntensity:0.08, transparent:useMirror, opacity:useMirror ? 0.92 : 1
+    color:0x080808, roughness:0.8, metalness:0.1, envMapIntensity:0.08
   }));
-  floor.rotation.x = -Math.PI / 2; floor.position.set(0, -5.61, -4); world.scene.add(floor);
+  floor.rotation.x = -Math.PI / 2; floor.position.set(0, -5.61, -4); world.scene.add(floor); world.floor = floor;
+  applyMirror();
   const shc = document.createElement('canvas'); shc.width = shc.height = 128; const shx = shc.getContext('2d');
   const shg = shx.createRadialGradient(64, 64, 4, 64, 64, 64); shg.addColorStop(0, '#000000d0'); shg.addColorStop(1, '#00000000');
   shx.fillStyle = shg; shx.fillRect(0, 0, 128, 128);
-  const contact = new THREE.Mesh(new THREE.PlaneGeometry(11, 5), new THREE.MeshBasicMaterial({ map:new THREE.CanvasTexture(shc), transparent:true, depthWrite:false }));
-  contact.rotation.x = -Math.PI / 2; contact.position.set(0, -5.6, -1.5); world.scene.add(contact);
+  const contact = new THREE.Mesh(new THREE.PlaneGeometry(11, CAB_DEPTH + 0.4), new THREE.MeshBasicMaterial({ map:new THREE.CanvasTexture(shc), transparent:true, depthWrite:false }));
+  contact.rotation.x = -Math.PI / 2; contact.position.set(0, -5.6, CAB_MID_Z + 0.5); world.scene.add(contact);
+}
+
+/** Spiegelboden passend zur Einstellung „Bewegung reduzieren“ ein- oder ausblenden. */
+export function applyMirror(){
+  if (!world.floor) return;
+  const on = !!world.mirror && !reducedMotion(), m = world.floor.material;
+  if (world.mirror) world.mirror.visible = on;
+  m.transparent = on; m.opacity = on ? 0.92 : 1; m.needsUpdate = true;
 }

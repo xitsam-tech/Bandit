@@ -3,7 +3,7 @@
  * und die Prüfung `checkWiring()` (Kabelenden an Ports, nichts durch Walzen/Bauteile, alles im Gehäuse, Abdeckung).
  * Kabel verlaufen als Polylinien mit gerundeten Ecken (Gerade + quadratischer Bogen) entlang von Rahmen und Wänden.
  */
-import { CELL_W, R, reelX } from './constants.js';
+import { AXIS_Z, BACK_Z, BACK_Z_LOW, CELL_W, FLOOR_Y, FRONT_Z, R, TOP_Y, WALL_X, reelX } from './constants.js';
 import { Batch, V, alignY, mergeGeometries } from './geo.js';
 
 /** Datenstruktur der Verkabelung (für Prüfung und Tests über __bandit.mech.wiring). */
@@ -179,9 +179,9 @@ export function flushCables(addFn){
 
 /* ----- Gehäuse-Innenraum (Vereinigung von Quadern + Pultkeil) ----- */
 const INTERIOR = [
-  [-3.97, -3.05, -4.22, 3.97, 3.25, 0.3],    // Oberteil
-  [-3.97, -5.17, -4.02, 3.97, -3.0, 0.3],    // Unterteil
-  [-3.35, 3.2, -1.95, 3.35, 4.9, 0.1]        // Aufsatz (Schild)
+  [-WALL_X, -3.05, BACK_Z, WALL_X, TOP_Y, FRONT_Z],         // Oberteil
+  [-WALL_X, FLOOR_Y, BACK_Z_LOW, WALL_X, -3.0, FRONT_Z],    // Unterteil
+  [-3.35, 3.2, -1.95, 3.35, 4.9, 0.1]                        // Aufsatz (Schild)
 ];
 export function insideCabinet(p){
   if (INTERIOR.some(b => p.x > b[0] && p.y > b[1] && p.z > b[2] && p.x < b[3] && p.y < b[4] && p.z < b[5])) return true;
@@ -202,7 +202,7 @@ export function checkWiring(){
     open:[], reelHits:[], solidHits:[], outside:[], unconnected:[], unusedPorts:[], minReelClearance:Infinity };
   const used = new Set();
   wiring.links.forEach(l => { used.add(l.from); used.add(l.to); if (!wiring.ports.has(l.from) || !wiring.ports.has(l.to)) res.open.push('link ' + l.from + '→' + l.to); });
-  const zc = -R, half = CELL_W / 2 + 0.03, rr = R + 0.08;
+  const zc = AXIS_Z, half = CELL_W / 2 + 0.03, rr = R + 0.08;
   wiring.cables.forEach(c => {
     used.add(c.from); used.add(c.to);
     const s = c.samples, A = wiring.ports.get(c.from), B = wiring.ports.get(c.to);

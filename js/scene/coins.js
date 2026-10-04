@@ -1,7 +1,7 @@
 /** Münzregen und Münzen in der Schale. */
 import { rand } from '../core/rng.js';
 import { clamp, now } from '../core/util.js';
-import { REDUCED } from '../dom.js';
+import { reducedMotion } from '../dom.js';
 import { world } from './context.js';
 import { TRAY } from './lower-cabinet.js';
 import { updateCoinRun } from './coin-chute.js';
@@ -27,7 +27,7 @@ function clampBowl(p, v){
   if (Math.abs(dz) > b.hd){ p.z = b.cz + sz * b.hd; if (v.z * sz > 0) v.z *= -0.4; }
 }
 export function buildCoins(){
-  const n = REDUCED ? 30 : 140;
+  const n = 140;   // bei reduzierter Bewegung werden nur die ersten 30 benutzt (umschaltbar zur Laufzeit)
   const geo = new THREE.CylinderGeometry(0.15, 0.15, 0.035, 24);
   const mat = new THREE.MeshStandardMaterial({ color:0xffc451, metalness:1, roughness:0.22, envMapIntensity:1.6, emissive:0x3a2200 });
   const mesh = new THREE.InstancedMesh(geo, mat, n);
@@ -45,9 +45,10 @@ export function clearTray(){
   world.coins.items.forEach((it, i) => { if (it.rest){ it.alive = false; it.rest = false; world.coins.d.scale.set(0, 0, 0); world.coins.d.updateMatrix(); world.coins.mesh.setMatrixAt(i, world.coins.d.matrix); } });
   world.coins.pile = 0; world.coins.mesh.instanceMatrix.needsUpdate = true;
 }
-export function burstCoins(ms, rate){ if (!world.coins) return; world.coins.emitUntil = now() + ms; world.coins.rate = REDUCED ? rate * 0.25 : rate; }
+export function burstCoins(ms, rate){ if (!world.coins) return; world.coins.emitUntil = now() + ms; world.coins.rate = reducedMotion() ? rate * 0.25 : rate; }
 function spawnCoin(){
-  const it = world.coins.items.find(x => !x.alive); if (!it) return;
+  const lim = reducedMotion() ? 30 : world.coins.items.length;
+  const it = world.coins.items.find((x, i) => i < lim && !x.alive); if (!it) return;
   it.alive = true; it.life = 0; it.rest = false;
   // Münzen kommen aus der Auswurföffnung; bei großen Gewinnen spritzen sie höher
   const big = world.coins.rate > 35;

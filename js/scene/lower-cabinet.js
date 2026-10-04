@@ -6,6 +6,7 @@ import { fmt } from '../core/util.js';
 import { $ } from '../dom.js';
 import { roundRect } from '../gfx/canvas2d.js';
 import { drawSymbolArt } from '../gfx/symbols.js';
+import { CAB_DEPTH, FRONT_Z } from './constants.js';
 import { pickables, world } from './context.js';
 import { canvasTex, frameMesh, rrShape } from './helpers.js';
 import { CAB_STYLES } from './styles.js';
@@ -78,8 +79,9 @@ export function buildLowerCabinet(lacquer, chrome, gold, dark){
 
   // Belly-Glass mit Artwork / Risikoleiter
   const bodyShape = rrShape(8.1, 2.12, 0.2, 0, -4.19);
-  const lower = new THREE.Mesh(new THREE.ExtrudeGeometry(bodyShape, { depth:4.4, bevelEnabled:true, bevelThickness:0.06, bevelSize:0.06, bevelSegments:3 }), lacquer);
-  lower.position.z = 0.3 - 4.4; world.scene.add(lower);
+  const lowDepth = CAB_DEPTH - 0.2;   // Unterteil etwas weniger tief als das Oberteil
+  const lower = new THREE.Mesh(new THREE.ExtrudeGeometry(bodyShape, { depth:lowDepth, bevelEnabled:true, bevelThickness:0.06, bevelSize:0.06, bevelSegments:3 }), lacquer);
+  lower.position.z = FRONT_Z - lowDepth; world.scene.add(lower);
   const bc = document.createElement('canvas'); bc.width = 1400; bc.height = 144;
   const btex = canvasTex(bc);
   const glassM = new THREE.Mesh(new THREE.PlaneGeometry(7.0, 0.72), new THREE.MeshBasicMaterial({ map:btex, toneMapped:false }));
@@ -99,8 +101,8 @@ export function buildLowerCabinet(lacquer, chrome, gold, dark){
   mouth = buildMouth(0, -5.02, 0.37, 1.5, chrome);
 
   // Sockel mit Schattenfuge und Goldleiste
-  const plinth = new THREE.Mesh(new THREE.BoxGeometry(7.8, 0.36, 4.6), dark); plinth.position.set(0, -5.43, -1.9); world.scene.add(plinth);
-  const foot = new THREE.Mesh(new THREE.BoxGeometry(8.3, 0.1, 5.0), chrome); foot.position.set(0, -5.56, -1.9); world.scene.add(foot);
+  const plinth = new THREE.Mesh(new THREE.BoxGeometry(7.8, 0.36, CAB_DEPTH), dark); plinth.position.set(0, -5.43, FRONT_Z + 0.1 - CAB_DEPTH / 2); world.scene.add(plinth);
+  const foot = new THREE.Mesh(new THREE.BoxGeometry(8.3, 0.1, CAB_DEPTH + 0.4), chrome); foot.position.set(0, -5.56, FRONT_Z + 0.1 - CAB_DEPTH / 2); world.scene.add(foot);
   const goldLine = new THREE.Mesh(new THREE.BoxGeometry(7.82, 0.035, 0.04), gold); goldLine.position.set(0, -5.29, 0.42); world.scene.add(goldLine);
 
 }

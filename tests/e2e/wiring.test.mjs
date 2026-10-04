@@ -3,13 +3,13 @@
 // Nur die Modulfassung hat ein Innenleben mit Kabelbaum (legacy wird übersprungen).
 import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openGame, targets } from './helpers.mjs';
+import { clickSetting, openGame, targets } from './helpers.mjs';
 
 for (const [name, file] of targets()){
   if (name === 'legacy') continue;
   describe(`Verkabelung (${name})`, { timeout: 240000 }, () => {
     let g;
-    before(async () => { g = await openGame({ file, wait: 3000 }); await g.page.click('#cab-glass'); await g.page.waitForTimeout(800); });
+    before(async () => { g = await openGame({ file, wait: 3000 }); await clickSetting(g.page, '#cab-glass'); await g.page.waitForTimeout(800); });
     after(() => g && g.close());
 
     test('Prüfung im Spiel: keine offenen Enden, nichts durch Walzen/Bauteile, alles im Gehäuse', async () => {

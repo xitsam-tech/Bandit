@@ -4,6 +4,7 @@
  * Münzprüfer mit Rückgabetaste, Münzrinnen, Hopper, Netzteil mit Netzeingang, Lautsprecher.
  * Registriert dabei alle Anschlüsse (Ports) und großen Bauteile (Hindernisse) für die Kabelprüfung.
  */
+import { BACK_Z_LOW, WALL_X } from './constants.js';
 import { lamps, world } from './context.js';
 import { bulbRing } from './bulbs.js';
 import { deck } from './lower-cabinet.js';
@@ -34,13 +35,23 @@ function standoff(b, M, a, w){
   b.add(new THREE.CylinderGeometry(0.03, 0.03, 0.015, 12), M.steel, new THREE.Matrix4().compose(w.clone().addScaledVector(d.normalize(), 0.04), q, V(1, 1, 1)));
 }
 
+/** Lage der Hauptplatine: hinten im Unterteil, Hinterkante 0,2 vor der Rückwand, unter den Walzen (Kabelbaum braucht sie). */
+export const MAIN = { x:0, y:-3.75, z:BACK_Z_LOW + 0.2 + 0.8 };
+
 export function buildInterior(add, M, b){
-  /* ----- Hauptplatine über den Walzen, auf den oberen Traversen ----- */
+  /* ----- Hauptplatine hinten im Unterteil (unter den Walzen), auf zwei Traversen von Wand zu Wand ----- */
   const mb = mainBoard(); mech.pcbs.push({ name:'Hauptplatine', stats:mb.stats });
-  placeBoard(add, mb, V(0, 2.615, -3.3), V(1, 0, 0), V(0, 1, 0));
-  [[-3.1, -4.0], [3.1, -4.0], [-3.1, -2.6], [3.1, -2.6]].forEach(([x, z]) => standoff(b, M, V(x, 2.5, z), V(x, 2.6, z)));
-  registerSolid('Hauptplatine', new THREE.Box3(V(-3.2, 2.58, -4.1), V(3.2, 2.67, -2.5)));
-  registerSolid('Kühlkörper', new THREE.Box3(V(-2.38, 2.6, -3.92), V(-2.12, 2.86, -3.72)));
+  const { x:MX, y:MY, z:MZ } = MAIN;
+  placeBoard(add, mb, V(MX, MY, MZ), V(1, 0, 0), V(0, 1, 0));
+  const ry = MY - 0.12, WX = WALL_X - 0.02;
+  [MZ - 0.7, MZ + 0.7].forEach(z => {
+    b.box(2 * WX, 0.07, 0.07, M.steel, [0, ry, z]);
+    [-1, 1].forEach(s => b.box(0.012, 0.18, 0.18, M.steel, [s * (WX - 0.006), ry, z]));
+    registerSolid('Platinenträger', new THREE.Box3(V(-WX, ry - 0.04, z - 0.04), V(WX, ry + 0.04, z + 0.04)));
+  });
+  [[-3.1, -0.7], [3.1, -0.7], [-3.1, 0.7], [3.1, 0.7]].forEach(([x, z]) => standoff(b, M, V(MX + x, ry + 0.035, MZ + z), V(MX + x, MY - 0.015, MZ + z)));
+  registerSolid('Hauptplatine', new THREE.Box3(V(MX - 3.2, MY - 0.035, MZ - 0.8), V(MX + 3.2, MY + 0.055, MZ + 0.8)));
+  registerSolid('Kühlkörper', new THREE.Box3(V(MX - 2.38, MY - 0.015, MZ - 0.62), V(MX - 2.12, MY + 0.245, MZ - 0.42)));
 
   /* ----- Lampentreiber an der linken Wand ----- */
   const ld = lampDriverBoard(); mech.pcbs.push({ name:'Lampentreiber', stats:ld.stats });
@@ -139,8 +150,9 @@ export function buildInterior(add, M, b){
   placeBoard(add, ps, PS, V(1, 0, 0), V(0, 1, 0));
   [[-0.68, -0.58], [0.68, -0.58], [-0.68, 0.58], [0.68, 0.58]].forEach(([x, z]) => standoff(b, M, V(PS.x + x, -5.11, PS.z + z), V(PS.x + x, -4.965, PS.z + z)));
   registerSolid('Netzteil', new THREE.Box3(V(-3.33, -5.17, -3.1), V(-1.77, -4.55, -1.7)));
-  b.box(0.3, 0.2, 0.1, M.black, [-3.4, -4.7, -3.97]); b.box(0.2, 0.12, 0.02, M.steel, [-3.4, -4.7, -3.915]);
-  registerPort('mains.in', { pos:V(-3.4, -4.7, -3.9), dir:V(0, 0, 1), part:'Netzeingang' });
+  const BW = BACK_Z_LOW;   // Rückwand des Unterteils
+  b.box(0.3, 0.2, 0.1, M.black, [-3.4, -4.7, BW + 0.05]); b.box(0.2, 0.12, 0.02, M.steel, [-3.4, -4.7, BW + 0.105]);
+  registerPort('mains.in', { pos:V(-3.4, -4.7, BW + 0.12), dir:V(0, 0, 1), part:'Netzeingang' });
   requirePorts('psu.out', 'psu.mains');
 
   /* ----- Lautsprecher hinter der Front des Unterteils ----- */

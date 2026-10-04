@@ -6,7 +6,7 @@
  */
 import { COLS } from '../core/config.js';
 import { now } from '../core/util.js';
-import { CELL_W, R, reelX } from './constants.js';
+import { AXIS_Z, CELL_W, R, WALL_X, reelX, rowAngle } from './constants.js';
 import { reels, world } from './context.js';
 import { checkWiring, flushCables, registerPort, registerSolid, requirePorts, wiring } from './cables.js';
 import { Batch, V, alignY, mergeGeometries } from './geo.js';
@@ -31,81 +31,96 @@ function materials(){
   };
 }
 
+/**
+ * Maße des Walzenrahmens (aus dem Walzenradius R abgeleitet): Seitenplatten, obere/untere Traverse, Walzenplatine
+ * unter dem Band. Auch für Kabelbaum und Innenleben (interior.js, harness.js).
+ */
+export const FRAME = (() => {
+  const XP = reelX(COLS - 1) + CELL_W / 2 + 0.14;   // Seitenplatten neben den äußeren Walzen
+  const PY = R + 0.22, PZ = R - 0.08, PZF = R - 0.5; // halbe Höhe, Tiefe nach hinten / nach vorn (vorn Platz für Kabel)
+  const RAIL_T = R + 0.1, RAIL_B = -(R + 0.37);       // obere Traverse knapp über dem Band, untere tiefer (trägt die Walzenplatinen)
+  return { XP, PY, PZ, PZF, RAIL_T, RAIL_B, RB_Y: RAIL_B + 0.1, k: R / 2.1 };
+})();
+
 export function buildMechanics(){
   const add = (o, parent = world.scene) => { o.visible = false; parent.add(o); mech.parts.push(o); return o; };
-  const M = materials(), b = new Batch(), zc = -R;
-  const XP = reelX(COLS - 1) + CELL_W / 2 + 0.14;   // Seitenplatten bei ±2.89
+  const M = materials(), b = new Batch(), zc = AXIS_Z;
+  const { XP, PY, PZ, PZF, RAIL_T, RAIL_B, RB_Y, k } = FRAME, WX = WALL_X - 0.02;
 
   /* ----- Walzenrahmen: Seitenplatten mit Erleichterungslöchern, Traversen, Distanzstücke zu den Gehäusewänden ----- */
-  const plate = new THREE.Shape(); plate.moveTo(-2.02, -2.4); plate.lineTo(2.02, -2.4); plate.lineTo(2.02, 2.4); plate.lineTo(-2.02, 2.4); plate.closePath();
-  [[-1.1, 1.25], [1.1, 1.25], [-1.1, -1.25], [1.1, -1.25]].forEach(([a, c]) => { const h = new THREE.Path(); h.absarc(a, c, 0.5, 0, Math.PI * 2, true); plate.holes.push(h); });
+  const plate = new THREE.Shape(); plate.moveTo(-PZF, -PY); plate.lineTo(PZ, -PY); plate.lineTo(PZ, PY); plate.lineTo(-PZF, PY); plate.closePath();
+  [[-1.1, 1.25], [1.1, 1.25], [-1.1, -1.25], [1.1, -1.25]].forEach(([a, c]) => { const h = new THREE.Path(); h.absarc(a * k, c * k, 0.5 * k, 0, Math.PI * 2, true); plate.holes.push(h); });
   const plateGeo = new THREE.ExtrudeGeometry(plate, { depth:0.04, bevelEnabled:false, curveSegments:24 });
   [-XP, XP].forEach(x => {
     b.add(plateGeo, M.zinc, new THREE.Matrix4().makeTranslation(x - 0.02, 0, zc).multiply(new THREE.Matrix4().makeRotationY(Math.PI / 2)));
-    registerSolid('Seitenplatte', new THREE.Box3(V(x - 0.02, -2.4, zc - 2.02), V(x + 0.02, 2.4, zc + 2.02)));
-    // Distanzstücke zur Gehäusewand (Vierkant) mit Wandwinkel
-    [[2.0, -4.06], [-2.0, -4.06], [2.0, -1.0], [-2.0, -1.0]].forEach(([y, z]) => {
-      const s = Math.sign(x), len = 3.95 - Math.abs(x) - 0.02;
+    registerSolid('Seitenplatte', new THREE.Box3(V(x - 0.02, -PY, zc - PZ), V(x + 0.02, PY, zc + PZF)));
+    // Distanzstücke zur Gehäusewand (Vierkant) mit Wandwinkel: oben/unten, hinter und vor der Achse
+    [[PY - 0.35, zc - 1.5], [-(PY - 0.35), zc - 1.5], [PY - 0.35, zc + 1.2], [-(PY - 0.35), zc + 1.2]].forEach(([y, z]) => {
+      const s = Math.sign(x), len = WX - Math.abs(x) - 0.02;
       b.box(len, 0.07, 0.07, M.steel, [x + s * (0.02 + len / 2), y, z]);
-      b.box(0.012, 0.18, 0.18, M.steel, [s * 3.95 - s * 0.006, y, z]);
-      registerSolid('Distanzstück', new THREE.Box3(V(Math.min(x, s * 3.95), y - 0.04, z - 0.04), V(Math.max(x, s * 3.95), y + 0.04, z + 0.04)));
+      b.box(0.012, 0.18, 0.18, M.steel, [s * WX - s * 0.006, y, z]);
+      registerSolid('Distanzstück', new THREE.Box3(V(Math.min(x, s * WX), y - 0.04, z - 0.04), V(Math.max(x, s * WX), y + 0.04, z + 0.04)));
     });
   });
-  // Traversen: oben (tragen die Hauptplatine), unten (tragen die Walzenhalter), vorne
+  // Traversen zwischen den Seitenplatten: oben knapp über dem Band, unten unter den Walzen (Halter + Walzenplatinen), vorne
   const rail = (x0, x1, y, z, s = 0.08) => {
     b.box(x1 - x0, s, s, M.steel, [(x0 + x1) / 2, y, z]);
     registerSolid('Traverse', new THREE.Box3(V(x0, y - s / 2, z - s / 2), V(x1, y + s / 2, z + s / 2)));
   };
-  rail(-3.2, 3.2, 2.46, -2.6); rail(-3.2, 3.2, 2.46, -4.0);
-  rail(-XP, XP, -2.46, zc); rail(-XP, XP, -2.46, -3.9); rail(-XP, XP, 2.3, -0.3, 0.06); rail(-XP, XP, -2.3, -0.3, 0.06);
+  rail(-XP, XP, RAIL_T, zc); rail(-XP, XP, RAIL_B, zc);
+  rail(-XP, XP, 2.3, zc + PZF - 0.06, 0.06); rail(-XP, XP, -2.3, zc + PZF - 0.06, 0.06);
 
   /* ----- je Walze: Halteblech im Spalt, Motor, Speichenrad (dreht mit), Lichtschranke, LED-Platine, Walzenplatine ----- */
-  const rp = reelBoard(), rowsY = [1.0, 0.36, -0.36, -1.0], lb = ledBoard(rowsY.map(y => -y));
+  // LED-Platine im Walzeninneren, 0,8 hinter dem Band; LEDs auf Höhe der vier sichtbaren Reihen
+  const LED_L = R - 0.8, rowsY = [0, 1, 2, 3].map(r => R * Math.sin(rowAngle(r)) * 0.9);
+  const rp = reelBoard(), lb = ledBoard(rowsY.map(y => -y));
   mech.pcbs.push({ name:'Walzenplatine', stats:rp.stats }, { name:'LED-Platine', stats:lb.stats });
+  const RR = R - 0.06;   // Felgenring des Speichenrads (am Band)
   reels.forEach((reel, c) => {
     const X = reelX(c), gx = X + 0.565;
-    // Speichenrad auf der Motorseite (schalenförmig: Nabe innen, Felgenring am Band), Indexfahne am Ring
+    // Speichenrad auf der Motorseite (schalenförmig: Nabe innen, Felgenring am Band), Indexfahne unten am Ring
     const wheel = [], dark = [];
     wheel.push({ geo:new THREE.CylinderGeometry(0.27, 0.27, 0.08, 28), matrix:new THREE.Matrix4().makeTranslation(0.15, 0, 0).multiply(new THREE.Matrix4().makeRotationZ(Math.PI / 2)) });
-    const ring = new THREE.RingGeometry(1.94, 2.04, 64); ring.rotateY(Math.PI / 2); ring.translate(0.44, 0, 0); wheel.push({ geo:ring });
-    const ring2 = new THREE.RingGeometry(1.94, 2.04, 64); ring2.rotateY(-Math.PI / 2); ring2.translate(0.44, 0, 0); wheel.push({ geo:ring2 });
-    for (let k = 0; k < 6; k++){
-      const a = k / 6 * Math.PI * 2 + 0.26, p0 = V(0.17, Math.cos(a) * 0.26, Math.sin(a) * 0.26), p1 = V(0.44, Math.cos(a) * 1.95, Math.sin(a) * 1.95);
+    const ring = new THREE.RingGeometry(RR - 0.1, RR, 96); ring.rotateY(Math.PI / 2); ring.translate(0.44, 0, 0); wheel.push({ geo:ring });
+    const ring2 = new THREE.RingGeometry(RR - 0.1, RR, 96); ring2.rotateY(-Math.PI / 2); ring2.translate(0.44, 0, 0); wheel.push({ geo:ring2 });
+    for (let i = 0; i < 6; i++){
+      const a = i / 6 * Math.PI * 2 + 0.26, p0 = V(0.17, Math.cos(a) * 0.26, Math.sin(a) * 0.26), p1 = V(0.44, Math.cos(a) * (RR - 0.09), Math.sin(a) * (RR - 0.09));
       const d = p1.clone().sub(p0);
       wheel.push({ geo:new THREE.BoxGeometry(0.03, d.length(), 0.08), matrix:alignY(p0.clone().add(p1).multiplyScalar(0.5), d) });
     }
-    dark.push({ geo:new THREE.BoxGeometry(0.06, 0.07, 0.1), matrix:new THREE.Matrix4().makeTranslation(0.48, 1.915, 0) });   // Indexfahne
+    dark.push({ geo:new THREE.BoxGeometry(0.06, 0.07, 0.1), matrix:new THREE.Matrix4().makeTranslation(0.48, -(RR - 0.125), 0) });   // Indexfahne
     dark.push({ geo:new THREE.CylinderGeometry(0.04, 0.04, 0.1, 12), matrix:new THREE.Matrix4().makeTranslation(0.16, 0, 0).multiply(new THREE.Matrix4().makeRotationZ(Math.PI / 2)) });
     add(new THREE.Mesh(mergeGeometries(wheel), M.white), reel.group);
     mech.flags.push(add(new THREE.Mesh(mergeGeometries(dark), M.black), reel.group));
-    // Halteblech im Spalt (unten an der Traverse, oben unter der Walzenplatine)
-    b.box(0.025, 4.72, 0.3, M.zinc, [gx, -0.08, zc]);
-    b.box(0.025, 0.06, 0.4, M.zinc, [gx, 2.25, zc - 0.33]);   // Lasche zur oberen Traverse
-    b.box(0.025, 0.2, 0.06, M.zinc, [gx, 2.36, -2.53]);
-    registerSolid('Walzenhalter', new THREE.Box3(V(gx - 0.0125, -2.44, zc - 0.15), V(gx + 0.0125, 2.28, zc + 0.15)));
-    // Schrittmotor: Topf, Flansch am Halteblech, Typenschild; Welle trägt das Rad
+    // Halteblech im Spalt: von der unteren bis zur oberen Traverse
+    const hy0 = RAIL_B + 0.04, hy1 = RAIL_T - 0.04;
+    b.box(0.025, hy1 - hy0, 0.3, M.zinc, [gx, (hy0 + hy1) / 2, zc]);
+    registerSolid('Walzenhalter', new THREE.Box3(V(gx - 0.0125, hy0, zc - 0.15), V(gx + 0.0125, hy1, zc + 0.15)));
+    // Schrittmotor: Topf, Flansch am Halteblech, Typenschild; Welle trägt das Rad. Anschluss unten (Kabel zur Walzenplatine)
     b.cyl(0.2, 0.32, M.black, [X + 0.36, 0, zc], [0, 0, Math.PI / 2], null, 28);
     b.box(0.02, 0.46, 0.46, M.steel, [X + 0.54, 0, zc]);
     b.box(0.2, 0.005, 0.18, M.label, [X + 0.36, 0.2, zc]);
     [[0.18, 0.18], [-0.18, 0.18], [0.18, -0.18], [-0.18, -0.18]].forEach(([y, z]) => b.cyl(0.025, 0.02, M.steel, [X + 0.535, y, zc + z], [0, 0, Math.PI / 2], null, 10));
-    registerPort('reel' + c + '.motor', { pos:V(X + 0.54, 0.255, zc - 0.06), dir:V(0, 1, 0), part:'Motor ' + (c + 1) });
-    b.box(0.02, 0.03, 0.07, M.white, [X + 0.54, 0.24, zc - 0.06]);
-    // Gabellichtschranke am Halteblech: Fahne läuft zwischen den Schenkeln (innerhalb des Bandes)
-    b.box(0.03, 0.24, 0.1, M.black, [X + 0.54, 1.91, zc]);
-    b.box(0.07, 0.06, 0.08, M.black, [X + 0.5, 1.83, zc]);
-    b.box(0.07, 0.05, 0.08, M.black, [X + 0.5, 1.995, zc]);
-    registerPort('reel' + c + '.opto', { pos:V(X + 0.54, 2.035, zc + 0.075), dir:V(0, 1, 0), part:'Lichtschranke ' + (c + 1) });
-    b.box(0.02, 0.012, 0.03, M.white, [X + 0.54, 2.03, zc + 0.075]);
+    registerPort('reel' + c + '.motor', { pos:V(X + 0.54, -0.255, zc - 0.06), dir:V(0, -1, 0), part:'Motor ' + (c + 1) });
+    b.box(0.02, 0.03, 0.07, M.white, [X + 0.54, -0.24, zc - 0.06]);
+    // Gabellichtschranke unten am Halteblech: Fahne läuft zwischen den Schenkeln (innerhalb des Bandes)
+    const oy = -(RR - 0.13);
+    b.box(0.03, 0.24, 0.1, M.black, [X + 0.54, oy, zc]);
+    b.box(0.07, 0.06, 0.08, M.black, [X + 0.5, oy + 0.08, zc]);
+    b.box(0.07, 0.05, 0.08, M.black, [X + 0.5, oy - 0.085, zc]);
+    registerPort('reel' + c + '.opto', { pos:V(X + 0.54, oy - 0.125, zc + 0.075), dir:V(0, -1, 0), part:'Lichtschranke ' + (c + 1) });
+    b.box(0.02, 0.012, 0.03, M.white, [X + 0.54, oy - 0.12, zc + 0.075]);
     // LED-Leuchtplatine im Walzeninneren an einem Arm vom linken Halteblech (offene Walzenseite)
     const ax = X - 0.55;
-    b.box(0.34, 0.03, 0.06, M.zinc, [ax + 0.17, 0, zc]).box(0.04, 0.03, 1.3, M.zinc, [X - 0.2, 0, zc + 0.64]);
-    b.box(0.03, 0.05, 0.06, M.white, [X - 0.54, 0.03, zc]);
-    const led = lb.group.clone(); led.rotation.x = Math.PI / 2; led.position.set(X, 0, zc + 1.3); add(led);
-    registerSolid('LED-Platine', new THREE.Box3(V(X - 0.32, -1.25, zc + 1.27), V(X + 0.32, 1.25, zc + 1.33)));
-    registerPort('reel' + c + '.led', { pos:V(X - 0.54, 0.055, zc), dir:V(0, 1, 0), part:'LED-Platine ' + (c + 1) });
-    // Walzenplatine über dem Band, auf den Halteblechen
-    placeBoard(add, rp, V(X, 2.3, zc), V(1, 0, 0), V(0, 1, 0), 'rp' + c + '.', true);
-    registerSolid('Walzenplatine', new THREE.Box3(V(X - 0.56, 2.285, zc - 0.12), V(X + 0.56, 2.42, zc + 0.12)));
+    b.box(0.34, 0.03, 0.06, M.zinc, [ax + 0.17, 0, zc]).box(0.04, 0.03, LED_L, M.zinc, [X - 0.2, 0, zc + LED_L / 2 - 0.01]);
+    b.box(0.03, 0.05, 0.06, M.white, [X - 0.54, -0.03, zc]);
+    const led = lb.group.clone(); led.rotation.x = Math.PI / 2; led.position.set(X, 0, zc + LED_L); add(led);
+    registerSolid('LED-Platine', new THREE.Box3(V(X - 0.32, -1.25, zc + LED_L - 0.03), V(X + 0.32, 1.25, zc + LED_L + 0.03)));
+    registerPort('reel' + c + '.led', { pos:V(X - 0.54, -0.055, zc), dir:V(0, -1, 0), part:'LED-Platine ' + (c + 1) });
+    // Walzenplatine unter dem Band, auf der unteren Traverse (Abstandsbolzen), steckt seitlich im Halteblech
+    placeBoard(add, rp, V(X, RB_Y, zc), V(1, 0, 0), V(0, 1, 0), 'rp' + c + '.', true);
+    [-0.42, 0.42].forEach(dx => b.cyl(0.025, RB_Y - RAIL_B - 0.04, M.brass, [X + dx, (RB_Y + RAIL_B + 0.04) / 2, zc], [0, 0, 0], null, 6));
+    registerSolid('Walzenplatine', new THREE.Box3(V(X - 0.56, RB_Y - 0.01, zc - 0.12), V(X + 0.56, RB_Y + 0.12, zc + 0.12)));
     requirePorts('reel' + c + '.motor', 'reel' + c + '.opto', 'reel' + c + '.led');
   });
   // Halteblech links neben Walze 1 (trägt deren LED-Arm) – an der linken Seitenplatte
@@ -150,7 +165,7 @@ export function buildMechanics(){
   buildHarness();
   flushCables(add);
   // dezente Innenbeleuchtung, damit die Mechanik im Glas lesbar ist
-  mech.light = add(new THREE.PointLight(0xdfefff, 0.45, 9)); mech.light.position.set(0, 1.2, -1.2);
+  mech.light = add(new THREE.PointLight(0xdfefff, 0.45, 9 * FRAME.k)); mech.light.position.set(0, 1.2, AXIS_Z + 0.9);
   updateSpring();
 }
 
