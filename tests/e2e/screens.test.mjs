@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { openGame, FILES, SCREENS } from './helpers.mjs';
+import { clickSetting, openGame, FILES, SCREENS } from './helpers.mjs';
 
 const UPDATE = process.env.UPDATE_SNAPSHOTS === '1';
 const OUT = UPDATE ? SCREENS : path.join(os.tmpdir(), 'bandit-screens');
@@ -36,7 +36,7 @@ describe('Optischer Regressionstest (neu)', { timeout: 480000 }, () => {
     mkdirSync(OUT, { recursive: true });
     g = await openGame({ file: FILES.neu, wait: 4000, init: INIT });
     for (const [view, cab, orbit] of VIEWS){
-      if (cab){ await g.page.click(cab); await g.page.waitForTimeout(500); }
+      if (cab){ await clickSetting(g.page, cab); await g.page.waitForTimeout(500); }
       if (orbit) await g.page.evaluate(o => { __t.orbit.yaw = o.yaw; __t.orbit.pitch = o.pitch; }, orbit);
       // Kamera gleitet je Bild ein Stück zum Ziel → warten, bis sie steht (unabhängig von der Bildrate)
       await g.page.evaluate(async () => {

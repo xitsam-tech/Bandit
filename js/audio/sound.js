@@ -15,7 +15,7 @@ export const Snd = {
       try { this.ctx = new AC(); } catch(e){ return null; }
       const c = this.ctx;
       // Signalweg: Quellen → Bus → Kompressor → Master; Hall als Send parallel
-      this.master = c.createGain(); this.master.gain.value = 0.8; this.master.connect(c.destination);
+      this.master = c.createGain(); this.master.gain.value = this.volumeGain(); this.master.connect(c.destination);
       const comp = c.createDynamicsCompressor();
       comp.threshold.value = -16; comp.knee.value = 12; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.22;
       comp.connect(this.master);
@@ -37,6 +37,14 @@ export const Snd = {
     }
     if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
     return this.ctx;
+  },
+  /** Master-Verstärkung aus der Lautstärke-Einstellung (0…100 % → 0…1; 80 % = früherer fester Wert 0,8). */
+  volumeGain(){ return clamp(S.volume, 0, 100) / 100; },
+  /** Lautstärke anwenden (sanfte Rampe); vor dem ersten Ton gibt es noch keinen Kontext – dann beim Anlegen. */
+  applyVolume(){
+    if (!this.ctx || !this.master) return;
+    const g = this.master.gain, t = this.ctx.currentTime;
+    g.cancelScheduledValues(t); g.setTargetAtTime(this.volumeGain(), t, 0.04);
   },
   // Ausgang mit Panorama und Hall-Anteil
   out(node, pan = 0, rev = 0.15){

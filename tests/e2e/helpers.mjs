@@ -103,3 +103,16 @@ export const SELFTEST_OK = '20/20 bestanden';
 export function selfTests(page){
   return page.evaluate(() => { __bandit.runSelfTests(); return document.querySelector('#testList li:last-child').textContent; });
 }
+
+/**
+ * Bedienelement klicken, das im Einstellungsmenü liegt: Menü öffnen, klicken, Menü wieder schließen.
+ * Elemente außerhalb des Menüs (oder in der Legacy-Fassung ohne Menü) werden direkt geklickt.
+ * @param {any} page  @param {string} sel
+ */
+export async function clickSetting(page, sel){
+  const inMenu = await page.evaluate(s => { const el = document.querySelector(s); return !!(el && el.closest('#setModal')); }, sel);
+  if (!inMenu) return page.click(sel);
+  if (await page.evaluate(() => document.getElementById('setModal').hidden)) await page.click('#settingsBtn');
+  await page.click(sel);
+  if (!(await page.evaluate(() => document.getElementById('setModal').hidden))) await page.click('#setClose');
+}

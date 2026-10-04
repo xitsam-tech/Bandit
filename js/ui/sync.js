@@ -5,7 +5,7 @@ import { xpNeed } from '../core/progression.js';
 import { rt, selectionLocked } from '../core/runtime.js';
 import { S } from '../core/state.js';
 import { fmt } from '../core/util.js';
-import { $ } from '../dom.js';
+import { $, reducedMotion } from '../dom.js';
 import { LCD } from '../gfx/lcd.js';
 import { updateLamps } from '../scene/lamps.js';
 import { updateSticky } from '../scene/sticky.js';
@@ -39,7 +39,9 @@ export function syncUI(){
   sb.textContent = rt.spinning ? 'STOPP' : rt.busy ? 'WEITER' : rt.gamble ? 'NEHMEN & DREHEN' : free ? `FREISPIEL (${S.freeSpins})` : 'DREHEN';
   sb.style.fontSize = rt.gamble && !rt.spinning && !rt.busy ? '17px' : '';
   sb.disabled = !rt.glOK || (rt.busy && !rt.bannerState) || (!rt.spinning && !rt.busy && (broke || (!free && !lines.length)));
-  $('refillBtn').classList.toggle('show', broke && !S.freeSpins);
+  // Neues Spiel liegt im Einstellungsmenü: Knopf hervorheben, wenn die Credits nicht mehr reichen
+  const out = broke && !S.freeSpins;
+  $('settingsBtn').classList.toggle('attn', out); $('refillBtn').classList.toggle('broke', out);
   $('lvl').textContent = S.level;
   $('xpBar').style.width = Math.min(100, S.xp / xpNeed(S.level) * 100).toFixed(1) + '%';
   $('xpTxt').textContent = `${Math.floor(S.xp)} / ${xpNeed(S.level)} XP`;
@@ -60,6 +62,8 @@ export function syncUI(){
   const ab = $('autoBtn'); ab.setAttribute('aria-pressed', String(rt.autoOn)); ab.textContent = rt.autoOn ? 'Auto an' : 'Auto';
   $('soundBtn').setAttribute('aria-pressed', String(S.sound)); $('soundBtn').textContent = S.sound ? 'Ton an' : 'Ton aus';
   $('linesBtn').setAttribute('aria-pressed', String(S.showLines));
+  $('reducedBtn').setAttribute('aria-pressed', String(reducedMotion()));
+  $('volRange').value = S.volume; $('volVal').textContent = S.volume + ' %';
   updateLamps();
   if (rt.glOK) updateSticky();
   if (!$('dbgModal').hidden) renderDebug();

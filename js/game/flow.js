@@ -38,7 +38,7 @@ export function spin(){
   const cost = betValue() * lines.length;
   if (!free){
     if (S.credits + 1e-9 < cost){
-      say(`Zu wenig Credits für ${fmt(cost)}. Senke den Einsatz oder wähle weniger Linien.`, 'bad');
+      say(`Zu wenig Credits für ${fmt(cost)}. Senke den Einsatz, wähle weniger Linien oder starte unter ⚙ Einstellungen ein neues Spiel.`, 'bad');
       Ticker.set('ZU WENIG CREDITS', '#ff3d9a'); stopAuto(); return;
     }
     S.credits = +(S.credits - cost).toFixed(4);

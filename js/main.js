@@ -1,4 +1,5 @@
 /** Einstieg: Zustand laden, Szene aufbauen, UI binden, Render-Schleife starten. */
+import { Snd } from './audio/sound.js';
 import { WHEEL_MIN } from './core/config.js';
 import { buildLines, evaluate } from './core/lines.js';
 import { randomStops, setRandomSource, setStopSource } from './core/rng.js';
@@ -6,7 +7,7 @@ import { rt } from './core/runtime.js';
 import { S, loadState, pruneSticky, saveState, setStops, snapshot } from './core/state.js';
 import { REEL_STRIPS, STRIP_LEN, findStops, matrixFromStops, validStops } from './core/strips.js';
 import { fmt } from './core/util.js';
-import { $, stage } from './dom.js';
+import { $, reducedMotion, stage } from './dom.js';
 import { settle, spin } from './game/flow.js';
 import { gambleCollect, gamblePick, offerGamble } from './game/gamble.js';
 import { runWheel } from './game/wheel-flow.js';
@@ -90,7 +91,7 @@ function start(hotData){
     get renderer(){ return world.renderer; }, get scene(){ return world.scene; }, get camera(){ return world.camera; }, get composer(){ return world.composer; },
     get coins(){ return world.coins; }, get lever(){ return world.lever; }, get lacquerMat(){ return world.lacquerMat; }, get bokeh(){ return world.bokeh; },
     reels, holdFrames, stickyMeshes, lamps, deck, mech, orbit, stage, raycaster, ndc, Ticker, LCD,
-    updateSticky, applyCabinetStyle, gambleCollect,
+    updateSticky, applyCabinetStyle, gambleCollect, Snd, reducedMotion,
     // Walzenstreifen und Stopppositionen (Tests: setStopSource(() => stops) erzwingt den nächsten Dreh, null = Zufall)
     REEL_STRIPS, STRIP_LEN, readStops, matrixFromStops, findStops, randomStops, setStopSource, setRandomSource
   };

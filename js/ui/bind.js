@@ -5,12 +5,13 @@ import { BET_STEPS, START_CREDITS } from '../core/config.js';
 import { rt } from '../core/runtime.js';
 import { S, saveState } from '../core/state.js';
 import { now } from '../core/util.js';
-import { $ } from '../dom.js';
+import { $, reducedMotion } from '../dom.js';
 import { closeBanner } from '../game/banner.js';
 import { spin } from '../game/flow.js';
 import { gambleCollect, gamblePick } from '../game/gamble.js';
 import { Ticker } from '../gfx/ticker.js';
 import { orbit, resetView } from '../scene/camera.js';
+import { applyMirror } from '../scene/renderer.js';
 import { CAB_STYLES, applyBrightness, applyCabinetStyle } from '../scene/styles.js';
 import { changeBet, say, togglePair, toggleRow } from './controls.js';
 import { renderDebug, runSelfTests } from './debug.js';
@@ -38,7 +39,13 @@ export function bindUI(){
     else if (!rt.autoOn && S.freeSpins <= 0) clearTimeout(rt.autoTimer);
   });
   $('soundBtn').addEventListener('click', () => { S.sound = !S.sound; Music.sync(); syncUI(); saveState(); Snd.tone(660, 0.06, { type:'square', vol:0.06 }); });
-  $('linesBtn').addEventListener('click', () => { S.showLines = !S.showLines; syncUI(); saveState(); });
+  $('linesBtn').addEventListener('click', () => {
+    S.showLines = !S.showLines; say(S.showLines ? 'Gewinnlinien werden angezeigt.' : 'Gewinnlinien ausgeblendet – Gewinne leuchten auf den Feldern.'); syncUI(); saveState();
+  });
+  $('reducedBtn').addEventListener('click', () => {
+    S.reduced = !reducedMotion(); applyMirror(); say(S.reduced ? 'Bewegung reduziert.' : 'Volle Bewegung.'); syncUI(); saveState();
+  });
+  $('volRange').addEventListener('input', e => { S.volume = +e.target.value; Snd.applyVolume(); $('volVal').textContent = S.volume + ' %'; saveState(); });
   $('musicBtn').addEventListener('click', () => { S.music = !S.music; if (S.music && !S.sound){ S.sound = true; } Music.sync(); syncUI(); saveState(); });
   $('brightRange').addEventListener('input', e => { S.brightness = (+e.target.value) / 100; applyBrightness(); $('brightVal').textContent = Math.round(S.brightness * 100) + ' %'; saveState(); });
   document.querySelectorAll('.cabopt').forEach(b => b.addEventListener('click', () => {
@@ -53,30 +60,49 @@ export function bindUI(){
   $('gRed').addEventListener('click', () => gamblePick(true));
   $('gBlack').addEventListener('click', () => gamblePick(false));
   $('gTake').addEventListener('click', () => gambleCollect());
+  // Neues Spiel: mit Rückfrage (zweiter Klick), außer die Credits reichen ohnehin nicht mehr
+  let refillArm = 0;
   $('refillBtn').addEventListener('click', () => {
+    const b = $('refillBtn'), needsConfirm = S.credits >= START_CREDITS * 0.05 && !b.classList.contains('broke');
+    if (needsConfirm && now() > refillArm){
+      refillArm = now() + 4000; b.classList.add('confirm'); b.textContent = 'Wirklich neu starten? Nochmal tippen';
+      setTimeout(() => { if (now() >= refillArm){ b.classList.remove('confirm'); b.textContent = 'Neues Spiel · 100 Credits'; } }, 4100);
+      return;
+    }
+    refillArm = 0; b.classList.remove('confirm'); b.textContent = 'Neues Spiel · 100 Credits';
     S.credits = START_CREDITS; rt.lastWin = 0; say('Neues Spiel: 100 Credits. Viel Glück!', 'good');
     Ticker.set('NEUES SPIEL · 100 CREDITS', '#7dff9b', 2400); syncUI(); saveState();
+    closeModal('setModal');
   });
-  const openModal = id => { $(id).hidden = false; $(id).querySelector('button').focus(); };
-  const closeModal = id => { $(id).hidden = true; };
+  // Dialoge: Fokus beim Öffnen hinein, beim Schließen zurück zum auslösenden Knopf
+  const opener = {};
+  const openModal = id => { opener[id] = document.activeElement; $(id).hidden = false; $(id).querySelector('button').focus(); };
+  const closeModal = id => {
+    if ($(id).hidden) return;
+    $(id).hidden = true;
+    const o = opener[id]; opener[id] = null;
+    if (o && o.focus && document.contains(o) && !o.closest('[hidden]')) o.focus();
+  };
   $('payBtn').addEventListener('click', () => { renderPaytable(); openModal('payModal'); });
   $('payClose').addEventListener('click', () => closeModal('payModal'));
-  $('debugBtn').addEventListener('click', () => { renderDebug(); openModal('dbgModal'); });
+  $('settingsBtn').addEventListener('click', () => openModal('setModal'));
+  $('setClose').addEventListener('click', () => closeModal('setModal'));
+  $('debugBtn').addEventListener('click', () => { closeModal('setModal'); opener.dbgModal = $('settingsBtn'); renderDebug(); $('dbgModal').hidden = false; $('dbgModal').querySelector('button').focus(); });
   $('dbgClose').addEventListener('click', () => closeModal('dbgModal'));
   $('testBtn').addEventListener('click', runSelfTests);
-  ['payModal', 'dbgModal'].forEach(id => $(id).addEventListener('click', e => { if (e.target.id === id) closeModal(id); }));
+  ['payModal', 'setModal', 'dbgModal'].forEach(id => $(id).addEventListener('click', e => { if (e.target.id === id) closeModal(id); }));
 
   const firstGesture = () => { Snd.ensure(); Music.sync(); window.removeEventListener('pointerdown', firstGesture); window.removeEventListener('keydown', firstGesture); };
   window.addEventListener('pointerdown', firstGesture); window.addEventListener('keydown', firstGesture);
   // Mausklicks hinterlassen keinen Fokusring; Klick-Geräusch für alle Knöpfe außer DREHEN (hat eigenen Hebel-Sound)
   document.addEventListener('click', e => {
     const b = e.target.closest && e.target.closest('button');
-    if (b && e.detail > 0 && b.id !== 'payClose' && b.id !== 'dbgClose') b.blur();
+    if (b && e.detail > 0 && !b.closest('.modal')) b.blur();
     if (b && b.id !== 'spinBtn' && !b.disabled) Snd.ui();
   });
   document.addEventListener('keydown', e => {
-    const modalOpen = !$('payModal').hidden || !$('dbgModal').hidden;
-    if (e.key === 'Escape'){ closeModal('payModal'); closeModal('dbgModal'); closeBanner(); return; }
+    const modalOpen = !$('payModal').hidden || !$('setModal').hidden || !$('dbgModal').hidden;
+    if (e.key === 'Escape'){ closeModal('payModal'); closeModal('setModal'); closeModal('dbgModal'); closeBanner(); return; }
     if (modalOpen) return;
     const tag = (e.target && e.target.tagName) || '';
     if (e.repeat) return;

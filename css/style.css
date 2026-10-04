@@ -159,11 +159,11 @@ button:disabled{opacity:.45; cursor:not-allowed}
 .chip{min-width:46px; padding:8px 10px; font-family:var(--digits); font-size:13px}
 .chip[aria-pressed="true"]{color:#2a1400; border-color:var(--gold); background:linear-gradient(180deg, #ffe17a, var(--gold)); box-shadow:0 0 16px -4px #ffc83aaa}
 .chip.covered{opacity:.4}
-.cab .chips .label{width:100%; margin-bottom:2px}
+.chips.cab .label{width:100%; margin-bottom:2px}
 .bright{display:flex; align-items:center; gap:10px; margin-top:10px}
 .bright input{flex:1; min-width:0; accent-color:var(--gold)}
 .bright b{font-family:var(--digits); font-size:12px; min-width:44px; text-align:right; font-variant-numeric:tabular-nums}
-.cab .chips .cabopt{flex:1 1 40%}
+.chips.cab .cabopt{flex:1 1 40%}
 .cabopt{font-family:var(--body); font-size:13.5px; flex:1 1 0; min-width:0; padding-inline:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 
 .tools{display:flex; flex-wrap:wrap; gap:8px}
@@ -202,8 +202,18 @@ button:disabled{opacity:.45; cursor:not-allowed}
 .status{margin:0; min-height:1.4em; font-size:13px; color:var(--muted)}
 .status.good{color:var(--good)}
 .status.bad{color:var(--bad)}
-.refill{display:none; width:100%; margin-top:10px; border-color:var(--good); color:var(--good)}
-.refill.show{display:block}
+.refill{display:block; width:100%; border-color:var(--good); color:var(--good)}
+.refill.confirm{border-color:var(--bad); color:var(--bad)}
+/* Einstellungen: Hinweis am Knopf, wenn die Credits nicht mehr reichen (Neues Spiel steckt im Menü) */
+#settingsBtn.attn{border-color:var(--good); color:var(--good); box-shadow:0 0 16px -4px #7dff9b99}
+
+/* ---------- Einstellungen ---------- */
+.settings{width:min(520px, 100%)}
+.set-group + .set-group{margin-top:16px; padding-top:14px; border-top:1px solid var(--line)}
+.set-group h4{margin:0 0 10px; font-size:13px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--muted)}
+.set-row{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+.set-row button{flex:1 1 auto; font-size:13.5px; padding:8px 10px}
+.set-note{margin:8px 0 0; font-size:12px; color:var(--muted)}
 
 /* ---------- Gewinnplan / Debug ---------- */
 .modal{position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:16px; background:#04020acc; backdrop-filter:blur(6px)}

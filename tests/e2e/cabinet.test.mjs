@@ -1,7 +1,7 @@
 // Gehäusewahl, Glas-Innenleben, Münzschale, Ansichten (Vorlagen: run8.js, glass.js, traytest.js, mechlook.js).
 import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openGame, targets, selfTests, SELFTEST_OK } from './helpers.mjs';
+import { clickSetting, openGame, targets, selfTests, SELFTEST_OK } from './helpers.mjs';
 
 for (const [name, file] of targets()){
   describe(`Gehäuse & Münzschale (${name})`, { timeout: 300000 }, () => {
@@ -10,7 +10,7 @@ for (const [name, file] of targets()){
     after(() => g && g.close());
 
     test('Gehäusewahl Holz: Zustand, Knopfstatus, kein horizontaler Überlauf', async () => {
-      await g.page.click('#cab-wood'); await g.page.waitForTimeout(1500);
+      await clickSetting(g.page, '#cab-wood'); await g.page.waitForTimeout(1500);
       assert.equal(await g.page.evaluate(() => __t.S.cabinet), 'wood');
       assert.equal(await g.page.getAttribute('#cab-wood', 'aria-pressed'), 'true');
       assert.equal(await g.page.getAttribute('#cab-neon', 'aria-pressed'), 'false');
@@ -19,12 +19,12 @@ for (const [name, file] of targets()){
     });
 
     test('Glas zeigt das Innenleben, Holz verbirgt es wieder', async () => {
-      await g.page.click('#cab-glass'); await g.page.waitForTimeout(1500);
+      await clickSetting(g.page, '#cab-glass'); await g.page.waitForTimeout(1500);
       const glass = await g.page.evaluate(() => ({ cab: __t.S.cabinet, parts: (() => { let n = 0; __t.mech.parts.forEach(o => o.traverse(m => { if (m.isMesh) n++; })); return n; })(), visible: __t.mech.parts.every(o => o.visible),
         back: __t.mech.backPlate.visible, transparent: __t.lacquerMat.transparent, opacity: __t.lacquerMat.opacity }));
       assert.deepEqual(glass, { cab: 'glass', parts: glass.parts, visible: true, back: false, transparent: true, opacity: 0.09 });
       assert.ok(glass.parts > 100, 'viele Innenteile (Meshes, Kleinteile sind je Material zusammengefasst): ' + glass.parts);
-      await g.page.click('#cab-wood'); await g.page.waitForTimeout(800);
+      await clickSetting(g.page, '#cab-wood'); await g.page.waitForTimeout(800);
       assert.deepEqual(await g.page.evaluate(() => ({ hidden: __t.mech.parts.every(o => !o.visible), transparent: __t.lacquerMat.transparent, back: __t.mech.backPlate.visible })),
         { hidden: true, transparent: false, back: true });
     });
@@ -48,7 +48,7 @@ for (const [name, file] of targets()){
     });
 
     test('Glas: keine Innenteile außerhalb des Gehäuses', async () => {
-      await g.page.click('#cab-glass'); await g.page.waitForTimeout(500);
+      await clickSetting(g.page, '#cab-glass'); await g.page.waitForTimeout(500);
       const bad = await g.page.evaluate(() => { const bad = [], bb = new THREE.Box3(), c = new THREE.Vector3();
         __t.mech.parts.forEach(o => o.traverse(m => { if (!m.isMesh) return; bb.setFromObject(m); bb.getCenter(c);
           if (Math.abs(c.x) > 4.2 || c.y < -5.6 || c.y > 5.2 || c.z < -4.5 || c.z > 1.6) bad.push(m.geometry.type); })); return bad; });
@@ -56,13 +56,13 @@ for (const [name, file] of targets()){
     });
 
     test('Ansicht: 3D → Frontal → Drehteller; Drehteller dreht', async () => {
-      await g.page.click('#viewBtn'); assert.equal(await g.page.textContent('#viewBtn'), 'Ansicht: Frontal');
-      await g.page.click('#viewBtn'); assert.equal(await g.page.textContent('#viewBtn'), 'Ansicht: Drehteller');
+      await clickSetting(g.page, '#viewBtn'); assert.equal(await g.page.textContent('#viewBtn'), 'Ansicht: Frontal');
+      await clickSetting(g.page, '#viewBtn'); assert.equal(await g.page.textContent('#viewBtn'), 'Ansicht: Drehteller');
       const y0 = await g.page.evaluate(() => __t.orbit.yaw); await g.page.waitForTimeout(3000);
       const dy = await g.page.evaluate(() => __t.orbit.yaw) - y0;
       // Software-Rendering liefert nur wenige Bilder pro Sekunde (dt ist pro Bild auf 50 ms begrenzt) → nur Richtung prüfen
       assert.ok(dy > 0.01, 'Drehung in 3 s: ' + dy.toFixed(2) + ' rad');
-      await g.page.click('#viewBtn'); assert.equal(await g.page.textContent('#viewBtn'), 'Ansicht: 3D');
+      await clickSetting(g.page, '#viewBtn'); assert.equal(await g.page.textContent('#viewBtn'), 'Ansicht: 3D');
       assert.equal(await selfTests(g.page), name === 'legacy' ? '18/18 bestanden' : SELFTEST_OK);
     });
 

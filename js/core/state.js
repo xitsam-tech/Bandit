@@ -16,7 +16,9 @@ import { clamp } from './util.js';
  * @property {boolean[]} pairs
  * @property {number} jackpot
  * @property {boolean} sound
- * @property {boolean} showLines
+ * @property {boolean} showLines  Gewinnlinien (und aktive Linien) im Overlay zeichnen; Standard aus
+ * @property {number} volume      Lautstärke 0…100 (Master)
+ * @property {boolean | null} reduced  Bewegung reduzieren; null = Systemeinstellung
  * @property {number} freeSpins
  * @property {number} fsBetIdx
  * @property {Line[] | null} fsLines
@@ -50,6 +52,8 @@ export const S = {
   jackpot: JP_SEED,
   sound: true,
   showLines: false,
+  volume: 80,
+  reduced: null,
   freeSpins: 0, fsBetIdx: 2, fsLines: null, fsWon: 0,
   stats: { spins:0, wagered:0, won:0, biggest:0, fsTriggers:0, jackpots:0, wheels:0, gambleNet:0 },
   stops: null, matrix: null,
@@ -73,6 +77,8 @@ export function loadState(extra){
   if (Number.isFinite(src.jackpot)) S.jackpot = clamp(src.jackpot, JP_SEED, JP_MAX);
   if (typeof src.sound === 'boolean') S.sound = src.sound;
   if (typeof src.showLines === 'boolean') S.showLines = src.showLines;
+  if (Number.isFinite(src.volume)) S.volume = clamp(Math.round(src.volume), 0, 100);
+  if (typeof src.reduced === 'boolean') S.reduced = src.reduced;
   /** @type {(a: any[]) => number[]} */
   const validKeys = a => a.filter(k => Number.isInteger(k) && k >= 0 && k < ROWS * COLS);
   const hasFsLines = Array.isArray(src.fsLines) && src.fsLines.length > 0;
@@ -115,7 +121,7 @@ export function pruneSticky(){
 export function snapshot(){
   return {
     credits:S.credits, betIdx:S.betIdx, singles:S.singles, pairs:S.pairs, jackpot:S.jackpot,
-    sound:S.sound, showLines:S.showLines, freeSpins:S.freeSpins, fsBetIdx:S.fsBetIdx,
+    sound:S.sound, showLines:S.showLines, volume:S.volume, reduced:S.reduced, freeSpins:S.freeSpins, fsBetIdx:S.fsBetIdx,
     fsLines:S.fsLines, fsWon:S.fsWon, stats:S.stats, stops:S.stops, matrix:S.matrix,
     sticky:S.sticky, level:S.level, xp:S.xp, music:S.music, turbo:S.turbo, view:S.view, history:S.history, pending:S.pending, cabinet:S.cabinet,
     brightness:S.brightness, gambleRefund:S.gambleRefund, wheelPending:S.wheelPending

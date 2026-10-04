@@ -72,53 +72,70 @@ for (const [name, file] of targets({ reels: true })){
       if (r.fsLeft === 0){ assert.equal(r.stickyAfter, 0); assert.equal(r.holdFramesAfter, 0); }
     });
 
-    test('alle Joker-Walzen (2–4) gehalten: Runde endet ohne Hänger', async () => {
+    test('alle Joker-Walzen (2–5) gehalten: Runde endet ohne Hänger', async () => {
       await g.page.evaluate(() => __fs.idle());
       const r = await g.page.evaluate(async () => {
         const S = __t.S;
-        // je ein Joker auf Walze 2, 3 und 4 (Walze 1 und 5 tragen keinen Joker)
-        const st = __t.findStops(m => [1, 2, 3].every(c => m.some(row => row[c] === 9)));
+        // je ein Joker auf Walze 2, 3, 4 und 5 (Walze 1 trägt keinen Joker)
+        const st = __t.findStops(m => [1, 2, 3, 4].every(c => m.some(row => row[c] === 9)));
         const keys = []; __bandit.matrixFromStops(st).forEach((row, r) => row.forEach((v, c) => { if (v === 9) keys.push(r * 5 + c); }));
         await __fs.setupFree(keys, 1);
         const stops0 = __t.readStops();
         __bandit.spin(); const held = __t.reels.map(r => !!r.held), t0 = performance.now();
         while (__t.spinning || __t.busy){ await new Promise(r => setTimeout(r, 100)); if (performance.now() - t0 > 30000) return 'HANG'; }
         __t.clearAuto();
-        return { held, kept: [1, 2, 3].every(c => __t.readStops()[c] === stops0[c]), fs: S.freeSpins, sticky: S.sticky.length };
+        return { held, kept: [1, 2, 3, 4].every(c => __t.readStops()[c] === stops0[c]), fs: S.freeSpins, sticky: S.sticky.length };
       });
       assert.notEqual(r, 'HANG');
-      assert.deepEqual(r.held, [false, true, true, true, false]);
+      assert.deepEqual(r.held, [false, true, true, true, true]);
       assert.ok(r.kept, 'gehaltene Walzen behalten ihre Stopps');
       assert.equal(r.fs, 0); assert.equal(r.sticky, 0);
     });
 
-    // Bonus auf (0,0), (1,2), (2,4) – Walze 1, 3, 5; gehaltene Walzen bleiben auf ihrem Stopp
+    // Genau n Bonus-Symbole auf freien Walzen (Bonus steht auf jeder Walze); gehaltene Walzen bleiben auf ihrem Stopp.
+    // fs = 0: bezahlter Dreh im Grundspiel (Auslösung), sonst ein Freispiel (Retrigger).
     const scenario = (scen) => g.page.evaluate(async (scen) => {
       const S = __t.S;
       await __fs.idle();
-      await __fs.setupFree(scen.sticky, scen.fs);
-      const held = [0, 1, 2, 3, 4].map(c => S.sticky.some(k => k % 5 === c)), cur = __t.readStops();
-      const st = __t.findStops(m => m[0][0] === 10 && m[1][2] === 10 && m[2][4] === 10 && m.flat().filter(v => v === 12).length < 4 &&
-        __bandit.evaluate(m, __bandit.buildLines()).lineTotal < 50, { fixed: cur.map((p, c) => held[c] ? p : null) });
+      if (scen.fs) await __fs.setupFree(scen.sticky, scen.fs);
+      const held = [0, 1, 2, 3, 4].map(c => !!scen.fs && S.sticky.some(k => k % 5 === c)), cur = __t.readStops();
+      const lines = __bandit.buildLines();
+      const st = __t.findStops(m => m.flat().filter((v, i) => v === 10 && !held[i % 5]).length === scen.n && m.flat().filter(v => v === 12).length < 4 &&
+        __bandit.evaluate(m, lines).lineTotal < 50, { fixed: cur.map((p, c) => held[c] ? p : null) });
       if (!st) return 'KEINE STOPPS';
       __t.setStops(() => st); __bandit.spin(); __t.setStops(null);
       const before = S.freeSpins; // nach Abzug
       const t0 = performance.now();
-      while (__t.spinning || __t.busy){ await new Promise(r => setTimeout(r, 100)); if (performance.now() - t0 > 60000) return 'HANG ' + JSON.stringify({ sp: __t.spinning, busy: __t.busy, fs: S.freeSpins, spins: S.stats.spins, phases: __t.reels.map(r => r.phase), banner: !!__bandit.rt.bannerState, wheel: __bandit.world.wheel && __bandit.world.wheel.state, st, now: performance.now(), dec: __t.reels.filter(r => r.phase === 'decel').map(r => ({ TD: r.TD, tD: r.tD, dist: r.dist, sD: r.sD, j: r.j, s: r.s, v: r.v, plan: r.plan, lastT: r.lastT })) }); }
+      while (__t.spinning || __t.busy){ await new Promise(r => setTimeout(r, 100)); if (performance.now() - t0 > 60000) return 'HANG ' + JSON.stringify({ sp: __t.spinning, busy: __t.busy, fs: S.freeSpins, phases: __t.reels.map(r => r.phase) }); }
       __t.clearAuto();
       return { afterSpinDeduct: before, after: S.freeSpins };
     }, scen);
 
     test('Retrigger: 3 Bonus auf freien Walzen bei 2 Freispielen → 1 + 3', async () => {
-      assert.deepEqual(await scenario({ fs: 2, sticky: [] }), { afterSpinDeduct: 1, after: 4 });
+      assert.deepEqual(await scenario({ fs: 2, sticky: [], n: 3 }), { afterSpinDeduct: 1, after: 4 });
     });
 
     test('Retrigger im letzten Freispiel → 0 + 3', async () => {
-      assert.deepEqual(await scenario({ fs: 1, sticky: [] }), { afterSpinDeduct: 0, after: 3 });
+      assert.deepEqual(await scenario({ fs: 1, sticky: [], n: 3 }), { afterSpinDeduct: 0, after: 3 });
     });
 
     test('Retrigger mit gehaltener Walze 2 → 1 + 3', async () => {
-      assert.deepEqual(await scenario({ fs: 2, sticky: [1] }), { afterSpinDeduct: 1, after: 4 });
+      assert.deepEqual(await scenario({ fs: 2, sticky: [1], n: 3 }), { afterSpinDeduct: 1, after: 4 });
+    });
+
+    test('Retrigger mit 4 Bonus → 1 + 5', async () => {
+      assert.deepEqual(await scenario({ fs: 2, sticky: [], n: 4 }), { afterSpinDeduct: 1, after: 6 });
+    });
+
+    test('Retrigger mit 5 Bonus im letzten Freispiel → 0 + 8', async () => {
+      assert.deepEqual(await scenario({ fs: 1, sticky: [], n: 5 }), { afterSpinDeduct: 0, after: 8 });
+    });
+
+    test('Grundspiel: 4 Bonus → 5 Freispiele, 5 Bonus → 8 Freispiele', async () => {
+      await g.page.evaluate(() => { const S = __t.S; S.freeSpins = 0; S.sticky = []; __t.updateSticky(); });
+      assert.deepEqual(await scenario({ fs: 0, sticky: [], n: 4 }), { afterSpinDeduct: 0, after: 5 });
+      await g.page.evaluate(() => { const S = __t.S; S.freeSpins = 0; S.sticky = []; __t.updateSticky(); });
+      assert.deepEqual(await scenario({ fs: 0, sticky: [], n: 5 }), { afterSpinDeduct: 0, after: 8 });
     });
 
     test('keine Konsolenfehler', () => { assert.deepEqual(g.errors, []); });

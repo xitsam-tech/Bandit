@@ -62,7 +62,7 @@ test('loadState: alter Spielstand (nur Matrix) stürzt nicht ab, ungültige Stop
   assert.equal(S.matrix, null);
   assert.equal(S.pending.stops, undefined);
   reset();
-  loadState({ state: { stops: [0, 1, 2, 3, 16] } });
+  loadState({ state: { stops: [0, 1, 2, 3, 22] } });
   assert.equal(S.stops, null);
   reset();
 });
@@ -81,7 +81,21 @@ test('pruneSticky: Klebe-Joker nur auf Feldern, die wirklich einen Joker zeigen'
   reset();
 });
 
+test('Einstellungen: Gewinnlinien, Lautstärke, Bewegung – Standard und Fallback für alte Stände', () => {
+  reset();
+  assert.equal(S.showLines, false, 'Gewinnlinien standardmäßig aus');
+  assert.equal(S.volume, 80); assert.equal(S.reduced, null, 'Bewegung: Systemeinstellung');
+  loadState({ state: { credits: 50 } });   // alter Stand ohne die neuen Felder
+  assert.equal(S.showLines, false); assert.equal(S.volume, 80); assert.equal(S.reduced, null);
+  loadState({ state: { showLines: true, volume: 35.4, reduced: true } });
+  assert.equal(S.showLines, true); assert.equal(S.volume, 35); assert.equal(S.reduced, true);
+  reset();
+  loadState({ state: { volume: 300, reduced: 'ja', showLines: 1 } });
+  assert.equal(S.volume, 100); assert.equal(S.reduced, null); assert.equal(S.showLines, false);
+  reset();
+});
+
 test('snapshot enthält alle gespeicherten Felder', () => {
   const keys = Object.keys(snapshot()).sort();
-  assert.deepEqual(keys, ['betIdx', 'brightness', 'cabinet', 'credits', 'fsBetIdx', 'fsLines', 'fsWon', 'freeSpins', 'gambleRefund', 'history', 'jackpot', 'level', 'matrix', 'music', 'pairs', 'pending', 'showLines', 'singles', 'sound', 'stats', 'sticky', 'stops', 'turbo', 'view', 'wheelPending', 'xp'].sort());
+  assert.deepEqual(keys, ['betIdx', 'brightness', 'cabinet', 'credits', 'fsBetIdx', 'fsLines', 'fsWon', 'freeSpins', 'gambleRefund', 'history', 'jackpot', 'level', 'matrix', 'music', 'pairs', 'pending', 'reduced', 'showLines', 'singles', 'sound', 'stats', 'sticky', 'stops', 'turbo', 'view', 'volume', 'wheelPending', 'xp'].sort());
 });

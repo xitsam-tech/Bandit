@@ -1,4 +1,4 @@
-/** Overlay: Gewinnlinien und Hover-Bänder in Bildschirmkoordinaten. */
+/** Overlay: Gewinnlinien (abschaltbar über S.showLines) und Hover-Bänder in Bildschirmkoordinaten. */
 import { activeLines } from '../core/lines.js';
 import { rt } from '../core/runtime.js';
 import { S } from '../core/state.js';
@@ -68,10 +68,11 @@ export function drawOverlay(){
     });
     fx.globalAlpha = 1;
   }
+  // Linien nur mit der Einstellung „Gewinnlinien anzeigen“ (Standard aus); sonst zeigen Feldrahmen und Lampen den Gewinn
   if (S.showLines && !rt.present){
     activeLines().forEach(L => drawLine(L, L.color, 3, 0.75));
   }
-  if (rt.present && rt.present.res.wins.length && !rt.spinning){
+  if (S.showLines && rt.present && rt.present.res.wins.length && !rt.spinning){
     const wins = rt.present.res.wins;
     if (rt.present.idx < 0) wins.forEach(wn => drawLine(wn.line, wn.line.color, 5, 0.95, wn.count));
     else { const wn = wins[rt.present.idx % wins.length]; drawLine(wn.line, wn.line.color, 6, 1, wn.count); }
