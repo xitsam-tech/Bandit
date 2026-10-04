@@ -44,26 +44,32 @@ test('fastLines (Kalibrierung) rechnet wie evaluate', () => {
   }
 });
 
-// Exakt über alle 16^5 Stoppkombinationen (Werte aus tools/calibrate-strips.mjs)
-test('Basisspiel exakt: Linienquote, Treffer, Freispiel- und Rad-Auslösung', () => {
+// Exakt über alle 22^5 Stoppkombinationen (Werte aus tools/calibrate-strips.mjs)
+test('Basisspiel exakt: Linienquote, Treffer, Freispiel-Stufen und Rad-Auslösung', () => {
   const ex = exactBase();
+  const p = (/** @type {number} */ x) => (x * 100).toFixed(3) + ' %';
   assert.equal(ex.combos, STRIP_LEN ** COLS);
-  assert.ok(ex.rtpLines > 0.70 && ex.rtpLines < 0.75, `Linienquote ${(ex.rtpLines * 100).toFixed(2)} %`);
-  assert.equal(ex.pFs, 1 / 64, 'Bonus auf Walze 1, 3, 5: alle drei sichtbar = (4/16)³');
-  assert.equal(ex.pWheel, 1 / 64, 'Klee je einmal auf jeder Walze: ≥ 4 sichtbar = 16/1024');
-  assert.ok(ex.anyHit > 0.23 && ex.anyHit < 0.27, `Trefferquote ${(ex.anyHit * 100).toFixed(2)} %`);
+  assert.ok(ex.rtpLines > 0.58 && ex.rtpLines < 0.62, `Linienquote ${p(ex.rtpLines)}`);
+  // Bonus auf allen 5 Walzen, je 4 von 22 Stopps sichtbar (q = 2/11): ≥ 3 von 5 sichtbar
+  const q = 4 / 22, binom = (/** @type {number} */ k) => [1, 5, 10, 10, 5, 1][k] * q ** k * (1 - q) ** (5 - k);
+  for (const k of [3, 4, 5]) assert.ok(Math.abs(ex.fsBy[k] - binom(k)) < 1e-12, `${k} Bonus: ${p(ex.fsBy[k])}`);
+  assert.ok(ex.fsBy[5] > 0 && ex.fsBy[4] > 0, 'alle Freispiel-Stufen erreichbar');
+  assert.ok(Math.abs(ex.pFs - (binom(3) + binom(4) + binom(5))) < 1e-12, `Freispiel-Auslöser ${p(ex.pFs)}`);
+  // Klee: Walze 1, 2, 4 einmal (4/22), Walze 3 und 5 zweimal (8/22); Glücksrad ab 4 sichtbaren
+  assert.ok(ex.pWheel > 0.013 && ex.pWheel < 0.0155, `Glücksrad ${p(ex.pWheel)}`);
+  assert.ok(ex.anyHit > 0.23 && ex.anyHit < 0.27, `Trefferquote ${p(ex.anyHit)}`);
   assert.ok(ex.pJackpot > 0 && ex.pJackpot < 1 / 20000, `Jackpot 1 von ${Math.round(1 / ex.pJackpot)}`);
 });
 
 test('Monte Carlo (Seed 1): Quote ohne Jackpot 88–90 % inkl. Freispielen mit gehaltenen Walzen und Glücksrad', () => {
   const r = simulate({ spins: 400000, seed: 1 });
   const p = (/** @type {number} */ x) => (x * 100).toFixed(2) + ' %';
-  // Langlauf (tools/calibrate-strips.mjs, 2 Mio. Drehungen, Seed 1) ergibt 89,2 %, diese 400k Drehungen 88,4 %; Toleranz ±2,5 %
+  // Langlauf (tools/calibrate-strips.mjs, 2 Mio. Drehungen, Seed 1) ergibt 89,2 %, diese 400k Drehungen 88,5 %; Toleranz ±2,5 %
   assert.ok(r.rtp > 0.865 && r.rtp < 0.915, `Quote ${p(r.rtp)}`);
-  assert.ok(r.fsRate > 0.0140 && r.fsRate < 0.0172, `Freispiel-Auslöser ${p(r.fsRate)}`);
-  assert.ok(r.wheelRate > 0.0140 && r.wheelRate < 0.0185, `Glücksrad ${p(r.wheelRate)}`);
-  assert.ok(r.hitRate > 0.22 && r.hitRate < 0.28, `Trefferquote ${p(r.hitRate)}`);
-  assert.ok(r.fsSpinsPerTrigger >= 3 && r.fsSpinsPerTrigger < 3.5, `Freispiele je Auslösung ${r.fsSpinsPerTrigger}`);
+  assert.ok(r.fsRate > 0.042 && r.fsRate < 0.048, `Freispiel-Auslöser ${p(r.fsRate)}`);
+  assert.ok(r.wheelRate > 0.013 && r.wheelRate < 0.0175, `Glücksrad ${p(r.wheelRate)}`);
+  assert.ok(r.hitRate > 0.21 && r.hitRate < 0.28, `Trefferquote ${p(r.hitRate)}`);
+  assert.ok(r.fsSpinsPerTrigger >= 3.2 && r.fsSpinsPerTrigger < 4.2, `Freispiele je Auslösung ${r.fsSpinsPerTrigger}`);
   const wheelMean = WHEEL.reduce((a, b) => a + b, 0) / WHEEL.length;
   assert.ok(wheelMean > 6 && wheelMean < 6.5, 'mittlerer Rad-Multiplikator ≈ 6,3× Gesamteinsatz');
 });

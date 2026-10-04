@@ -19,10 +19,10 @@ export const WHEEL_MEAN = WHEEL.reduce((a, b) => a + b, 0) / WHEEL.length;
  */
 export function fastLines(m, pats, pay = PAY){
   let total = 0, jackpot = false;
+  const seq = [0, 0, 0, 0, 0];
   for (let li = 0; li < pats.length; li++){
     const p = pats[li];
-    const s0 = m[p[0]][0], s1 = m[p[1]][1], s2 = m[p[2]][2], s3 = m[p[3]][3], s4 = m[p[4]][4];
-    const seq = [s0, s1, s2, s3, s4];
+    for (let c = 0; c < 5; c++) seq[c] = m[p[c]][c];
     let best = 0, jk = 0;
     while (jk < 5 && seq[jk] === JOKER) jk++;
     if (jk >= 3) best = pay[JOKER][jk - 3];

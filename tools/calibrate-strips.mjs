@@ -3,9 +3,9 @@
 //   node tools/calibrate-strips.mjs                 Kennzahlen der aktuellen REEL_STRIPS (exakt + Monte Carlo)
 //   node tools/calibrate-strips.mjs --legacy        Kennzahlen des früheren Modells (Einzelsymbole nach Gewichten)
 //   node tools/calibrate-strips.mjs --search        Streifen suchen (Zusammensetzung + Reihenfolge), beste ausgeben
-//   Optionen: --seed=1  --spins=2000000  --iter=4000
+//   Optionen: --seed=1  --spins=2000000; Suche: --ev=0.6 --hit=0.022 --rtp=0.892 --any=0.25 --restarts=8 --arr=10 --steps=1500
 //
-// Basisspiel (Linien, Freispiel-/Rad-Auslösung, Jackpot) wird über alle 16^5 Stoppkombinationen exakt ausgewertet;
+// Basisspiel (Linien, Freispiel-/Rad-Auslösung, Jackpot) wird über alle STRIP_LEN^5 Stoppkombinationen exakt ausgewertet;
 // die Freispiele (Klebe-Joker halten Walzen, Retrigger, Rad) per Monte Carlo. Quoten relativ zum Gesamteinsatz,
 // ohne Jackpot-Topf (der wird mit 5 % jedes Einsatzes gespeist und kommt obendrauf).
 import { CLOVER, COLS, DIAMOND, FS_AWARD, FS_MULT, JOKER, ROWS, SCATTER, SYMBOLS, WHEEL, WHEEL_MIN } from '../js/core/config.js';
@@ -60,11 +60,22 @@ function simulateLegacy(spins, seed){
     wheelRate: wheels / spins, jpRate: jp / spins, hitRate: hits / spins, lineHitRate: lineHits / spins, sd: Math.sqrt(sq / spins - mean * mean) };
 }
 
-/** Bonusrunden-Erwartung (je Auslösung) per Monte Carlo. */
-function fsValue(strips, rounds, seed){
-  const rnd = seededRandom(seed); let w = 0, s = 0;
-  for (let i = 0; i < rounds; i++){ const r = simFreeRound(rnd, { strips, award: 3 }); w += r.win; s += r.spins; }
-  return { perTrigger: w / rounds, spins: s / rounds };
+/**
+ * Bonusrunden-Erwartung je Auslösung per Monte Carlo, gewichtet nach der exakten Verteilung der Bonus-Anzahl
+ * (3 / 4 / 5 Bonus → FS_AWARD 3 / 5 / 8 Freispiele).
+ * @param {number[][]} strips @param {number[]} fsBy  Wahrscheinlichkeit je Bonus-Anzahl (aus exactBase)
+ */
+function fsValue(strips, fsBy, rounds, seed){
+  const rnd = seededRandom(seed), pFs = fsBy.reduce((a, x, n) => a + (FS_AWARD(n) ? x : 0), 0);
+  let w = 0, s = 0;
+  for (let n = 3; n < fsBy.length; n++){
+    const share = fsBy[n] / pFs, k = Math.round(rounds * share);
+    if (!FS_AWARD(n) || !k) continue;
+    let wn = 0, sn = 0;
+    for (let i = 0; i < k; i++){ const r = simFreeRound(rnd, { strips, award: FS_AWARD(n) }); wn += r.win; sn += r.spins; }
+    w += share * wn / k; s += share * sn / k;
+  }
+  return { perTrigger: w, spins: s };
 }
 
 function report(){
@@ -76,8 +87,9 @@ function report(){
   console.log(`\nExakt über ${ex.combos} Stoppkombinationen (10 Linien):`);
   console.log(`  Linienquote ${pct(ex.rtpLines)}, Linientreffer ${pct(ex.lineHit)}, Treffer inkl. Features ${pct(ex.anyHit)}`);
   console.log(`  Freispiel-Auslöser ${pct(ex.pFs, 3)} (1 von ${(1 / ex.pFs).toFixed(1)}), Glücksrad ${pct(ex.pWheel, 3)} → ${pct(ex.rtpWheel)} Quote`);
-  console.log(`  Jackpot ${ex.pJackpot.toExponential(3)} je Dreh (1 von ${Math.round(1 / ex.pJackpot)}), Bonus-Verteilung: ` + ex.fsBy.slice(0, 6).map((x, i) => `${i}:${pct(x)}`).join(' '));
-  const fv = fsValue(REEL_STRIPS, 400000, SEED);
+  console.log(`  Jackpot ${ex.pJackpot.toExponential(3)} je Dreh (1 von ${Math.round(1 / ex.pJackpot)}), Bonus-Verteilung: ` + ex.fsBy.slice(0, 6).map((x, i) => `${i}:${pct(x, 3)}`).join(' '));
+  console.log(`  Freispiel-Stufen: 3 Bonus 1 von ${(1 / ex.fsBy[3]).toFixed(0)}, 4 Bonus 1 von ${(1 / ex.fsBy[4]).toFixed(0)}, 5 Bonus 1 von ${(1 / ex.fsBy[5]).toFixed(0)}`);
+  const fv = fsValue(REEL_STRIPS, ex.fsBy, 400000, SEED);
   console.log(`  Bonusrunde (MC 400k): ${fv.perTrigger.toFixed(3)}× Gesamteinsatz je Auslösung, ${fv.spins.toFixed(2)} Freispiele`);
   console.log(`  ⇒ Quote ohne Jackpot (exakt + MC-Bonus): ${pct(ex.rtpLines + ex.rtpWheel + ex.pFs * fv.perTrigger)}`);
   const t0 = Date.now(), mc = simulate({ spins: SPINS, seed: SEED });
@@ -92,17 +104,26 @@ function printMc(/** @type {any} */ mc){
 }
 
 /* ---------- Suche ---------- */
-// Aufbau: Bonus auf Walze 1, 3, 5 (je 1 → Auslösung genau 1/64), Klee auf jeder Walze (je 1 → Glücksrad genau 1/64),
-// Diamant auf Walze 1, 3, 5, Joker auf Walze 2, 3, 4. Die 9 normalen Symbole füllen den Rest (je Walze 1–3×).
-export const SPECIALS = [[SCATTER, CLOVER, DIAMOND], [JOKER, CLOVER], [SCATTER, JOKER, CLOVER, DIAMOND], [JOKER, CLOVER], [SCATTER, CLOVER, DIAMOND]];
-const MAX_COPIES = 3, CLIMB_STEPS = arg('steps', 1200);
+// Aufbau (22 Felder): Bonus auf jeder Walze (je 1 → 3, 4 und 5 Bonus erreichbar), Klee auf jeder Walze, auf Walze 3 und 5
+// doppelt (Glücksrad ≈ 1,4 %), Diamant auf jeder Walze, Joker auf Walze 2–5 (je 1). Die 9 normalen Symbole füllen den
+// Rest (je Walze 1–5×). Mit 4 sichtbaren von 22 Feldern ist ein Symbol in 4/22 der Stopps zu sehen; fünf Bonus-Walzen
+// ergeben deshalb zwangsläufig ≈ 4,5 % Freispiel-Auslöser (≥ 3 von 5).
+export const SPECIALS = [
+  [SCATTER, CLOVER, DIAMOND],
+  [SCATTER, CLOVER, JOKER, DIAMOND],
+  [SCATTER, CLOVER, CLOVER, JOKER, DIAMOND],
+  [SCATTER, CLOVER, JOKER, DIAMOND],
+  [SCATTER, CLOVER, CLOVER, JOKER, DIAMOND]
+];
+const MAX_COPIES = 5, CLIMB_STEPS = arg('steps', 1500);
 
 /** Erwartete Linienquote und Trefferwahrscheinlichkeit EINER Linie aus den Symbolhäufigkeiten (reihenfolgeunabhängig). */
 function lineStats(/** @type {number[][]} */ counts){
   const q = counts.map((cnt, c) => {
-    /** @type {[number, number][]} */ const arr = SPECIALS[c].map(x => [x, 1 / STRIP_LEN]);
-    cnt.forEach((k, x) => { if (k) arr.push([x, k / STRIP_LEN]); });
-    return arr;
+    /** @type {Map<number, number>} */ const m = new Map();
+    SPECIALS[c].forEach(x => m.set(x, (m.get(x) || 0) + 1 / STRIP_LEN));
+    cnt.forEach((k, x) => { if (k) m.set(x, (m.get(x) || 0) + k / STRIP_LEN); });
+    return [...m];
   });
   let ev = 0, hit = 0; const row = [0, 0, 0, 0, 0];
   const rec = (/** @type {number} */ c, /** @type {number} */ p) => {
@@ -116,7 +137,7 @@ function lineStats(/** @type {number[][]} */ counts){
 function climb(/** @type {() => number} */ rnd, /** @type {number} */ targetEv, /** @type {number} */ targetHit){
   const counts = SPECIALS.map(sp => {
     const c = Array(9).fill(1); let left = STRIP_LEN - sp.length - 9;
-    while (left > 0){ const i = Math.floor(rnd() * 5); if (c[i] < MAX_COPIES){ c[i]++; left--; } }
+    while (left > 0){ const i = Math.floor(rnd() * 9); if (c[i] < MAX_COPIES){ c[i]++; left--; } }
     return c;
   });
   const score = (/** @type {{ ev: number, hit: number }} */ x) => Math.abs(x.ev - targetEv) * 10 + Math.abs(x.hit - targetHit) * 40;
@@ -130,36 +151,61 @@ function climb(/** @type {() => number} */ rnd, /** @type {number} */ targetEv, 
   }
   return { counts, ...cur, score: cs };
 }
-/** Zufällige Anordnung: gleiche Symbole nie im selben 4er-Fenster (also auch nie benachbart, zyklisch). */
+/**
+ * Zufällige Anordnung per Tiefensuche: gleiche Symbole nie im selben 4er-Fenster (zyklisch, also auch nie benachbart),
+ * Sonder-Symbole (Bonus, Joker, Diamant, Klee) zusätzlich nie zu zweit im selben Fenster – keine Klumpen.
+ */
 function arrange(/** @type {number[]} */ bag, /** @type {() => number} */ rnd){
-  for (let tries = 0; tries < 5000; tries++){
-    const a = bag.slice();
-    for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
-    let ok = true;
-    for (let i = 0; i < a.length && ok; i++) for (let d = 1; d < ROWS && ok; d++) if (a[i] === a[(i + d) % a.length]) ok = false;
-    if (ok) return a;
-  }
+  const special = (/** @type {number} */ v) => v === SCATTER || v === JOKER || v === DIAMOND || v === CLOVER;
+  const n = bag.length, out = /** @type {number[]} */ ([]), left = new Map();
+  bag.forEach(v => left.set(v, (left.get(v) || 0) + 1));
+  const clash = (/** @type {number} */ a, /** @type {number} */ b) => a === b || (special(a) && special(b));
+  const fits = (/** @type {number} */ v, /** @type {number} */ i) => {
+    for (let d = 1; d < ROWS; d++){
+      if (i - d >= 0 && clash(out[i - d], v)) return false;
+      if (i + d >= n && clash(out[i + d - n], v)) return false;   // Umlauf zum Streifenanfang
+    }
+    return true;
+  };
+  let budget = 20000;
+  const rec = (/** @type {number} */ i) => {
+    if (i === n) return true;
+    if (--budget < 0) return false;
+    // Reihenfolge der Kandidaten: zufällig, gewichtet nach Restanzahl (häufige eher früher, sonst bleiben am Ende Dubletten)
+    const opts = [...left.keys()].filter(v => left.get(v) > 0 && fits(v, i))
+      .map(v => ({ v, key: Math.pow(rnd(), 1 / /** @type {number} */ (left.get(v))) })).sort((a, b) => b.key - a.key).map(o => o.v);
+    for (const v of opts){
+      out[i] = v; left.set(v, left.get(v) - 1);
+      if (rec(i + 1)) return true;
+      left.set(v, left.get(v) + 1);
+    }
+    return false;
+  };
+  for (let t = 0; t < 50; t++){ budget = 20000; out.length = 0; if (rec(0)) return out.slice(); }
   return null;
 }
 function search(){
-  const rnd = seededRandom(SEED), targetEv = arg('ev', 0.718), restarts = arg('restarts', 12), arrangements = arg('arr', 12);
+  const rnd = seededRandom(SEED), targetEv = arg('ev', 0.6), targetHit = arg('hit', 0.022), restarts = arg('restarts', 8), arrangements = arg('arr', 10);
+  const targetRtp = arg('rtp', 0.892), targetAny = arg('any', 0.25);
   // 1) Zusammensetzung
   let best = null;
-  for (let i = 0; i < restarts; i++){ const r = climb(rnd, targetEv, 0.0295); if (!best || r.score < best.score) best = r; }
+  for (let i = 0; i < restarts; i++){ const r = climb(rnd, targetEv, targetHit); if (!best || r.score < best.score) best = r; }
   console.log('Zusammensetzung (Anzahl Kirsche…BAR je Walze):', JSON.stringify(best.counts), `Linienquote ${pct(best.ev)}, Treffer je Linie ${pct(best.hit)}`);
-  // 2) Anordnung: höchste Gesamt-Trefferquote (Linien über 10 Linien hängen von der Reihenfolge ab)
+  // 2) Anordnung: Gesamtquote (exakt + MC-Freispiele) möglichst nah am Ziel, Trefferquote nah an ~25 %.
+  //    Die Freispiele hängen stark von der Lage der Joker zu Bonus und Gewinnsymbolen ab, daher je Anordnung bewertet.
   let pick = null;
   for (let i = 0; i < arrangements; i++){
     const strips = best.counts.map((cnt, c) => { const bag = SPECIALS[c].slice(); cnt.forEach((k, x) => { for (let n = 0; n < k; n++) bag.push(x); }); return arrange(bag, rnd); });
     if (strips.some(x => !x) || checkStrips(/** @type {number[][]} */ (strips)).length) continue;
-    const ex = exactBase({ strips: /** @type {number[][]} */ (strips) });
-    if (!pick || ex.anyHit > pick.ex.anyHit) pick = { strips, ex };
+    const ex = exactBase({ strips: /** @type {number[][]} */ (strips) }), fv = fsValue(/** @type {number[][]} */ (strips), ex.fsBy, 100000, SEED);
+    const rtp = ex.rtpLines + ex.rtpWheel + ex.pFs * fv.perTrigger, score = Math.abs(rtp - targetRtp) * 4 + Math.abs(ex.anyHit - targetAny);
+    console.log(`  Anordnung ${i + 1}: Linien ${pct(ex.rtpLines)}, Treffer ${pct(ex.anyHit)}, Bonusrunde ${fv.perTrigger.toFixed(2)}× → Quote ${pct(rtp)}`);
+    if (!pick || score < pick.score) pick = { strips, ex, fv, rtp, score };
   }
   if (!pick) throw new Error('keine Anordnung gefunden');
   console.log('Streifen:', JSON.stringify(pick.strips));
-  const fv = fsValue(/** @type {number[][]} */ (pick.strips), 200000, SEED);
-  const ex = pick.ex;
-  console.log(`Linien ${pct(ex.rtpLines)}, Treffer ${pct(ex.anyHit)}, Rad ${pct(ex.rtpWheel)}, Bonus ${fv.perTrigger.toFixed(3)}× → Quote ${pct(ex.rtpLines + ex.rtpWheel + ex.pFs * fv.perTrigger)}`);
+  const { ex, fv } = pick;
+  console.log(`Linien ${pct(ex.rtpLines)}, Treffer ${pct(ex.anyHit)}, Rad ${pct(ex.rtpWheel)}, Freispiele ${pct(ex.pFs, 3)} × ${fv.perTrigger.toFixed(3)} → Quote ${pct(pick.rtp)}`);
 }
 
 if (process.argv.includes('--legacy')){

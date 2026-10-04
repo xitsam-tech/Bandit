@@ -13,24 +13,28 @@ import { mod } from './util.js';
 const KI = 0, ZI = 1, OR = 2, PF = 3, ME = 4, GL = 5, ST = 6, S7 = 7, BAR = 8;
 
 /** Felder pro Walze (= Kacheln auf dem Walzenzylinder). */
-export const STRIP_LEN = 16;
+export const STRIP_LEN = 22;
 
 /**
  * Streifen pro Walze, je STRIP_LEN Symbole, von oben nach unten gelesen.
- * Aufbau: Bonus auf Walze 1/3/5, Klee auf jeder Walze, Diamant auf 1/3/5, Joker auf 2–4 (je einmal);
- * kein Symbol zweimal im selben sichtbaren Fenster.
- * Kalibriert mit `node tools/calibrate-strips.mjs` (Seed 1, 10 Linien, gleichverteilte Stopps):
+ * Aufbau: Bonus und Diamant auf jeder Walze (je einmal), Klee auf jeder Walze (Walze 3 und 5 zweimal), Joker auf 2–5;
+ * die normalen Symbole 1–5× je Walze. Kein Symbol zweimal im selben sichtbaren Fenster, Sonder-Symbole nie zu zweit.
+ * Gefunden mit `node tools/calibrate-strips.mjs --search` (Seed 1), Kennzahlen mit `node tools/calibrate-strips.mjs`
+ * (10 Linien, gleichverteilte Stopps; Basisspiel exakt über alle 22⁵ Stoppkombinationen):
  *   Quote ohne Jackpot 89,2 % (Monte Carlo, 2 Mio. Drehungen; exakt + MC-Bonus 89,4 %)
- *   = Linien 72,5 % + Freispiele 6,8 % + Glücksrad 9,9 %; dazu 5 % Jackpot-Einspeisung.
- *   Freispiel-Auslöser und Glücksrad je genau 1/64, Trefferquote 25,0 %, Jackpot ≈ 1 von 52 000.
+ *   = Linien 59,8 % + Freispiele 20,3 % + Glücksrad 9,0 %; dazu 5 % Jackpot-Einspeisung.
+ *   Freispiel-Auslöser 4,49 % (3 / 4 / 5 Bonus: 1 von 25 / 224 / 5033), Glücksrad 1,43 %,
+ *   Trefferquote 24,5 % (exakt, inkl. Features), Jackpot ≈ 1 von 32 000 (Basisspiel).
+ *   Mit 4 sichtbaren von 22 Feldern ist jedes Bonus-Symbol in 2/11 der Stopps zu sehen; damit 5 Bonus möglich sind,
+ *   steht Bonus auf allen fünf Walzen – das legt den Auslöser zwangsläufig auf ≈ 4,5 % (≥ 3 von 5).
  * @type {number[][]}
  */
 export const REEL_STRIPS = [
-  [ZI, OR, GL, S7, ME, ST, PF, K, OR, BAR, PF, B, OR, KI, PF, D],
-  [GL, PF, KI, ST, S7, J, ME, PF, OR, KI, K, ZI, PF, ME, KI, BAR],
-  [ST, KI, S7, BAR, D, PF, ME, GL, OR, PF, KI, B, ZI, PF, J, K],
-  [ME, GL, S7, ZI, KI, OR, K, ME, PF, GL, ZI, J, ST, PF, BAR, ZI],
-  [ST, GL, BAR, ZI, B, K, KI, PF, ST, ZI, KI, ME, S7, ZI, OR, D]
+  [S7, PF, ZI, ME, BAR, PF, KI, S7, ST, ME, BAR, B, KI, PF, ME, OR, K, ZI, GL, KI, OR, D],
+  [GL, PF, S7, ME, ZI, PF, K, KI, ZI, PF, OR, ME, D, BAR, GL, PF, KI, B, ZI, PF, ST, J],
+  [BAR, ZI, GL, PF, K, BAR, ME, PF, D, ZI, ST, ME, PF, B, S7, KI, PF, K, OR, KI, PF, J],
+  [ST, ME, OR, GL, ZI, K, OR, ME, ZI, PF, D, S7, OR, BAR, ST, KI, OR, B, ST, ZI, OR, J],
+  [BAR, S7, ME, B, ST, PF, ME, K, S7, ST, ZI, ME, KI, K, BAR, ME, GL, J, BAR, OR, ST, D]
 ];
 
 /** Startpositionen, wenn kein (gültiger) Stand gespeichert ist. */

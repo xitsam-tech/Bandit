@@ -6,7 +6,7 @@ import { REEL_STRIPS, START_STOPS, STRIP_LEN, checkStrips, findStops, matrixFrom
 import { buildLines, evaluate } from '../../js/core/lines.js';
 
 test('REEL_STRIPS: 5 Walzen mit je STRIP_LEN gültigen Symbolen, alle verschieden', () => {
-  assert.equal(STRIP_LEN, 16);
+  assert.equal(STRIP_LEN, 22);
   assert.equal(REEL_STRIPS.length, COLS);
   REEL_STRIPS.forEach(s => {
     assert.equal(s.length, STRIP_LEN);
@@ -25,21 +25,33 @@ test('REEL_STRIPS: kein Symbol zweimal im selben sichtbaren Fenster (keine Klump
   });
 });
 
-test('REEL_STRIPS: Sonder-Symbole wie kalibriert (Bonus 1/3/5, Klee überall, Joker 2–4, Diamant 1/3/5)', () => {
+test('REEL_STRIPS: Sonder-Symbole wie kalibriert (Bonus und Diamant überall, Klee überall – Walze 3/5 doppelt, Joker 2–5)', () => {
   const count = (/** @type {number} */ c, /** @type {number} */ v) => REEL_STRIPS[c].filter(x => x === v).length;
-  assert.deepEqual([0, 1, 2, 3, 4].map(c => count(c, SCATTER)), [1, 0, 1, 0, 1]);
-  assert.deepEqual([0, 1, 2, 3, 4].map(c => count(c, CLOVER)), [1, 1, 1, 1, 1]);
-  assert.deepEqual([0, 1, 2, 3, 4].map(c => count(c, JOKER)), [0, 1, 1, 1, 0]);
-  assert.deepEqual([0, 1, 2, 3, 4].map(c => count(c, DIAMOND)), [1, 0, 1, 0, 1]);
+  assert.deepEqual([0, 1, 2, 3, 4].map(c => count(c, SCATTER)), [1, 1, 1, 1, 1]);
+  assert.deepEqual([0, 1, 2, 3, 4].map(c => count(c, CLOVER)), [1, 1, 2, 1, 2]);
+  assert.deepEqual([0, 1, 2, 3, 4].map(c => count(c, JOKER)), [0, 1, 1, 1, 1]);
+  assert.deepEqual([0, 1, 2, 3, 4].map(c => count(c, DIAMOND)), [1, 1, 1, 1, 1]);
+  // normale Symbole je Walze 1–5×
+  REEL_STRIPS.forEach((s, c) => { for (let v = 0; v < 9; v++){ const n = count(c, v); assert.ok(n >= 1 && n <= 5, `Walze ${c + 1}: ${SYMBOLS[v].name} ${n}×`); } });
+});
+
+test('REEL_STRIPS: Sonder-Symbole nie zu zweit im selben sichtbaren Fenster (keine Klumpen)', () => {
+  const special = new Set([SCATTER, JOKER, DIAMOND, CLOVER]);
+  REEL_STRIPS.forEach((s, c) => {
+    for (let p = 0; p < STRIP_LEN; p++){
+      const n = Array.from({ length: ROWS }, (_, r) => s[(p + r) % STRIP_LEN]).filter(v => special.has(v)).length;
+      assert.ok(n <= 1, `Walze ${c + 1}, Stopp ${p}: ${n} Sonder-Symbole`);
+    }
+  });
 });
 
 test('matrixFromStops: Reihe r zeigt Streifenfeld (p + r) mod N, Reihe 0 oben, mit Umlauf', () => {
-  const stops = [0, 3, 13, 14, 15];
+  const stops = [0, 3, 13, 20, 21];
   const m = matrixFromStops(stops);
   assert.equal(m.length, ROWS); assert.ok(m.every(row => row.length === COLS));
   for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) assert.equal(m[r][c], REEL_STRIPS[c][(stops[c] + r) % STRIP_LEN]);
-  // Umlauf: Stopp 15 zeigt die Felder 15, 0, 1, 2
-  assert.deepEqual(m.map(row => row[4]), [15, 0, 1, 2].map(i => REEL_STRIPS[4][i]));
+  // Umlauf: Stopp 21 zeigt die Felder 21, 0, 1, 2
+  assert.deepEqual(m.map(row => row[4]), [21, 0, 1, 2].map(i => REEL_STRIPS[4][i]));
   // aufeinanderfolgende Stopps verschieben das Bild um genau eine Reihe
   const a = matrixFromStops([5, 5, 5, 5, 5]), b = matrixFromStops([6, 6, 6, 6, 6]);
   for (let r = 0; r < ROWS - 1; r++) assert.deepEqual(b[r], a[r + 1]);
@@ -47,8 +59,8 @@ test('matrixFromStops: Reihe r zeigt Streifenfeld (p + r) mod N, Reihe 0 oben, m
 
 test('validStops: nur 5 ganze Zahlen in 0..N-1', () => {
   assert.equal(validStops(START_STOPS), true);
-  assert.equal(validStops([0, 1, 2, 3, 15]), true);
-  for (const bad of [null, [0, 1, 2, 3], [0, 1, 2, 3, 16], [0, 1, 2, 3, -1], [0, 1, 2, 3, 1.5], 'x', [0, 1, 2, 3, '4']]) assert.equal(validStops(bad), false, JSON.stringify(bad));
+  assert.equal(validStops([0, 1, 2, 3, 21]), true);
+  for (const bad of [null, [0, 1, 2, 3], [0, 1, 2, 3, 22], [0, 1, 2, 3, -1], [0, 1, 2, 3, 1.5], 'x', [0, 1, 2, 3, '4']]) assert.equal(validStops(bad), false, JSON.stringify(bad));
 });
 
 test('findStops: findet passende Stopps, respektiert feste Walzen, null wenn unmöglich', () => {
@@ -67,6 +79,8 @@ test('Testszenarien sind auf den Streifen erreichbar', () => {
   assert.ok(findStops(m => m[0][1] === JOKER && m[1][2] === JOKER));
   // drei Joker-Walzen gleichzeitig gehalten
   assert.ok(findStops(m => [1, 2, 3].every(c => m.some(row => row[c] === JOKER))));
+  // Freispiel-Stufen: 3, 4 und 5 Bonus (3 / 5 / 8 Freispiele)
+  for (const n of [3, 4, 5]) assert.ok(findStops(m => evaluate(m, lines).scatter.count === n), `${n} Bonus erreichbar`);
   // Glücksrad: 5× Klee
   assert.ok(findStops(m => m.flat().filter(v => v === CLOVER).length === 5));
   // Mega Win (≥ 25× Gesamteinsatz bei 10 Linien) und Jackpot
