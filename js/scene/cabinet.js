@@ -26,7 +26,7 @@ export function buildCabinet(){
   // Rückdeckel: das Walzenfenster ist ein Durchbruch durchs Gehäuse – hinten verschließen (gleiches Material, bei Glas durchsichtig)
   const backCap = new THREE.Mesh(new THREE.PlaneGeometry(6.0, 3.6), lacquer); backCap.rotation.y = Math.PI; backCap.position.z = FRONT_Z - depth - 0.04; world.scene.add(backCap);
 
-  const back = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 3.8), dark); back.position.z = -R - 0.5;   // dunkle Blende hinter der Walzenachse world.scene.add(back); mech.backPlate = back;
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 3.8), dark); back.position.z = -R - 0.5; world.scene.add(back); mech.backPlate = back;   // dunkle Blende hinter der Walzenachse
 
   // Chromrahmen ums Fenster
   const bezel = frameMesh(6.35, 3.95, 5.9, 3.5, 0.32, 0.1, chrome); bezel.position.z = 0.33; world.scene.add(bezel);

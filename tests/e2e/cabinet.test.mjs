@@ -49,9 +49,10 @@ for (const [name, file] of targets()){
 
     test('Glas: keine Innenteile außerhalb des Gehäuses', async () => {
       await clickSetting(g.page, '#cab-glass'); await g.page.waitForTimeout(500);
-      const bad = await g.page.evaluate(() => { const bad = [], bb = new THREE.Box3(), c = new THREE.Vector3();
+      // Tiefe hängt vom Walzenradius ab (Achse bei z = −R, Rückwand knapp hinter 2R)
+      const bad = await g.page.evaluate(() => { const bad = [], bb = new THREE.Box3(), c = new THREE.Vector3(), back = 2 * __t.reels[0].group.position.z - 0.3;
         __t.mech.parts.forEach(o => o.traverse(m => { if (!m.isMesh) return; bb.setFromObject(m); bb.getCenter(c);
-          if (Math.abs(c.x) > 4.2 || c.y < -5.6 || c.y > 5.2 || c.z < -4.5 || c.z > 1.6) bad.push(m.geometry.type); })); return bad; });
+          if (Math.abs(c.x) > 4.2 || c.y < -5.6 || c.y > 5.2 || c.z < back || c.z > 1.6) bad.push(m.geometry.type); })); return bad; });
       assert.deepEqual(bad, []);
     });
 
